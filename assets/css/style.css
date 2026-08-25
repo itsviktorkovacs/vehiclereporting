@@ -51,22 +51,27 @@ input, select { font-family: inherit; }
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 12px; color: var(--steel); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .04em; }
 .field input {
-  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px;
+  width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px;
   background: #fbfbfa;
 }
 .field input:focus { outline: 2px solid var(--accent-dim); outline-offset: 1px; border-color: var(--accent); }
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  border: none; border-radius: 6px; padding: 10px 16px; font-size: 13.5px; font-weight: 600;
+  border: 1.5px solid transparent; border-radius: 12px; padding: 10px 18px; font-size: 13.5px; font-weight: 700;
   cursor: pointer; background: var(--line); color: var(--graphite);
 }
 .btn:hover { filter: brightness(0.97); }
 .btn:active { transform: translateY(1px); }
-.btn.primary { background: var(--accent); color: #fff; width: 100%; padding: 11px; margin-top: 6px; }
-.btn.ghost { background: transparent; color: var(--steel); border: 1px solid var(--line); }
-.btn.danger { background: var(--danger-bg); color: var(--danger); }
-.btn.small { padding: 6px 10px; font-size: 12.5px; }
-.btn.icon-btn { padding: 8px; width: 34px; height: 34px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; width: 100%; padding: 11px; margin-top: 6px; }
+.btn.ghost { background: transparent; color: var(--steel); border-color: var(--line); }
+.btn.danger { background: var(--danger-bg); border-color: var(--danger-bg); color: var(--danger); }
+.btn.small { padding: 8px 14px; font-size: 12.5px; }
+.btn.icon-btn { padding: 8px; width: 34px; height: 34px; border-radius: 10px; }
+.btn:disabled, .btn.is-disabled {
+  background: transparent; border-color: var(--line); color: var(--steel);
+  opacity: 0.6; cursor: not-allowed; filter: none; transform: none;
+}
+.btn:disabled:hover, .btn.is-disabled:hover { filter: none; }
 .login-error {
   display: none; background: var(--danger-bg); color: var(--danger); font-size: 12.5px;
   padding: 9px 11px; border-radius: 5px; margin-bottom: 14px;
@@ -119,8 +124,9 @@ input, select { font-family: inherit; }
 .custom-price-row label { color: var(--warn); }
 .form-row > div { flex: 1; }
 .form-row label { display: block; font-size: 11.5px; color: var(--steel); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .03em; }
-.form-row select, .form-row input {
-  width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 5px; font-size: 13.5px;
+.form-row select, .form-row input, textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13.5px;
+  font-family: inherit;
 }
 
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -399,10 +405,11 @@ td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numer
 .ho-mode-switch label {
   display: inline-flex; align-items: center; padding: 10px 18px; border-radius: 12px; cursor: pointer;
   font-size: 13.5px; font-weight: 700; color: var(--steel);
+  border: 1.5px solid var(--line); background: transparent;
 }
 .ho-mode-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
 .ho-mode-switch input:checked + span { color: #fff; }
-.ho-mode-switch label:has(input:checked) { background: var(--accent); }
+.ho-mode-switch label:has(input:checked) { background: var(--accent); border-color: var(--accent); }
 .ho-mode-switch label span { pointer-events: none; }
 
 /* ---------- Per-block "Releváns" toggle ---------- */
@@ -457,3 +464,27 @@ td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numer
 .ho-ios-toggle input:checked + .ho-ios-toggle-track { background: var(--accent); }
 .ho-ios-toggle input:checked + .ho-ios-toggle-track .ho-ios-toggle-thumb { transform: translateX(19px); }
 .ho-ios-toggle input:focus-visible + .ho-ios-toggle-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ho-photo-add-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- PWA install banner (iOS instructions) ---------- */
+.ho-ios-install-banner {
+  background: var(--accent); color: #fff; padding: 10px 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 13px; line-height: 1.4;
+}
+.ho-ios-install-banner button {
+  background: none; border: none; color: #fff; font-size: 16px; cursor: pointer;
+  flex-shrink: 0; padding: 0 4px;
+}
+.ho-save-load-wrap { display: flex; gap: 8px; align-items: center; }
+.ho-hail-damage-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 16px; flex-wrap: wrap; }
+.ho-hail-damage-row span { font-weight: 600; }
+.ho-hail-damage-row input[type="text"] { flex: 1; min-width: 200px; }
+.ho-emphasis-field {
+  background: linear-gradient(135deg, rgba(255,80,0,0.10), rgba(255,80,0,0.03));
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
+  padding: 8px 10px 10px;
+}
+.ho-emphasis-field label { font-weight: 700; color: var(--accent); }
+.ho-emphasis-field input, .ho-emphasis-field select { font-weight: 700; font-size: 15px; }

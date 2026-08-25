@@ -46,8 +46,10 @@ function showAppScreen(name) {
 
 let hoInitialized = false;
 let hoCarMarks = [];    // [{x, y}] click positions on the car diagram
-// hoDamageRows: [{id, hely, tipus, javitasModja, rogzitve, javitasSzukseges, raSzam, felszOsszeg, photos: [{dataUrl, caption}]}]
+// hoDamageRows: [{id, hely, tipus, javitasModja, rogzitve, javitasSzukseges, photos: [{dataUrl, caption}]}]
 let hoDamageRows = [];
+// hoKartortenetRows: [{id, hely, tipus, megjegyzes, javitva, photos: [{dataUrl, caption}]}]
+let hoKartortenetRows = [];
 const HO_TIRE_POSITIONS = [
   { kod: 'BE', nev: 'Bal eleje' },
   { kod: 'JE', nev: 'Jobb eleje' },
@@ -115,6 +117,7 @@ function initHandoverFormOnce() {
   renderTartozekokChecklist();
   renderTireTable();
   renderDamageCards();
+  renderKartortenetCards();
   renderMarkerPalette();
   drawCarDiagram();
   renderMarksList();
@@ -187,6 +190,11 @@ function hoFillVehicleFields(record) {
   if (record.felniTipus) {
     document.querySelectorAll('[data-role="hoTireField"][data-field="felniTipus"]').forEach(el => {
       if ([...el.options].some(o => o.value === record.felniTipus)) el.value = record.felniTipus;
+    });
+  }
+  if (record.abroncsMarka) {
+    document.querySelectorAll('[data-role="hoTireField"][data-field="abroncsMarka"]').forEach(el => {
+      el.value = record.abroncsMarka;
     });
   }
 
@@ -301,6 +309,7 @@ function applyBlockToggles() {
 }
 
 function hoIsBlockRelevant(blockKey) {
+  if (hoGetMode() === 'kartortenet') return false; // these sections don't apply to the Kártörténet mode
   const cb = document.querySelector('[data-role="hoBlockToggle"][data-block="' + blockKey + '"]');
   return !cb || cb.checked; // no toggle found = always relevant
 }
@@ -338,6 +347,7 @@ function renderTireTable() {
         </select>
       </td>
       <td><input type="text" data-role="hoTireField" data-tire="${pos.kod}" data-field="meret" placeholder="pl. 245/45R19"></td>
+      <td><input type="text" data-role="hoTireField" data-tire="${pos.kod}" data-field="abroncsMarka" placeholder="pl. Continental"></td>
       <td class="num"><input type="number" min="0" max="20" step="0.1" data-role="hoTireField" data-tire="${pos.kod}" data-field="menetmelyseg" style="text-align:right;"></td>
     </tr>
   `).join('');
@@ -346,7 +356,7 @@ function renderTireTable() {
 function getTireData() {
   const data = {};
   HO_TIRE_POSITIONS.forEach(pos => {
-    data[pos.kod] = { felniTipus: '', meret: '', menetmelyseg: '' };
+    data[pos.kod] = { felniTipus: '', meret: '', abroncsMarka: '', menetmelyseg: '' };
   });
   document.querySelectorAll('[data-role="hoTireField"]').forEach(el => {
     data[el.dataset.tire][el.dataset.field] = el.value;
@@ -588,12 +598,29 @@ function hoClassifyMark(mark) {
 function renderMarksList() {
   const container = document.getElementById('hoMarksList');
   if (!container) return;
-  if (hoCarMarks.length === 0) {
+  const jegkarChecked = document.getElementById('hoJegkarCheckbox') && document.getElementById('hoJegkarCheckbox').checked;
+  const jegkarMertek = document.getElementById('hoJegkarMerteke') ? document.getElementById('hoJegkarMerteke').value.trim() : '';
+  const jegkarLine = jegkarChecked ? 'Jégkár' + (jegkarMertek ? ' — ' + jegkarMertek : '') : null;
+
+  if (hoCarMarks.length === 0 && !jegkarLine) {
     container.innerHTML = '<div class="ho-mark-empty">Nincs jelölt sérülés a rajzon.</div>';
     return;
   }
-  container.innerHTML = hoCarMarks.map((m, i) => `<div class="ho-mark-row">${i + 1}. ${escapeHtml(hoClassifyMark(m))}</div>`).join('');
+  const rows = hoCarMarks.map((m) => hoClassifyMark(m));
+  if (jegkarLine) rows.push(jegkarLine);
+  container.innerHTML = rows.map((text, i) => `<div class="ho-mark-row">${i + 1}. ${escapeHtml(text)}</div>`).join('');
 }
+
+(function wireJegkarToggle() {
+  const cb = document.getElementById('hoJegkarCheckbox');
+  const field = document.getElementById('hoJegkarMerteke');
+  if (!cb || !field) return;
+  cb.addEventListener('change', () => {
+    field.style.display = cb.checked ? '' : 'none';
+    renderMarksList();
+  });
+  field.addEventListener('input', renderMarksList);
+})();
 
 // ---------------- Signature pads ----------------
 
@@ -673,7 +700,7 @@ function compressImageDataUrl(dataUrl, maxDim, quality) {
 function renderDamageCards() {
   const container = document.getElementById('hoDamageCards');
   const helyek = (window.HANDOVER_CONFIG && window.HANDOVER_CONFIG.serulesHelyek) || [];
-  const tipusok = (window.HANDOVER_CONFIG && window.HANDOVER_CONFIG.serulesTipusok) || [];
+  const tipusok = HO_MARKER_TYPES.map(m => m.label);
   const modok = (window.HANDOVER_CONFIG && window.HANDOVER_CONFIG.javitasModjai) || [];
 
   if (hoDamageRows.length === 0) {
@@ -713,13 +740,17 @@ function renderDamageCards() {
             <option value="NEM" ${row.javitasSzukseges === 'NEM' ? 'selected' : ''}>NEM</option>
           </select>
         </div>
-        <div><label>RA szám</label><input type="text" data-role="hoRowField" data-row="${row.id}" data-field="raSzam" value="${escapeHtml(row.raSzam)}"></div>
-        <div><label>Felsz. összeg (Ft)</label><input type="number" min="0" step="100" data-role="hoRowField" data-row="${row.id}" data-field="felszOsszeg" value="${row.felszOsszeg}"></div>
       </div>
-      <label class="file-input-label">
-        + Fotó hozzáadása ehhez a sérüléshez
-        <input type="file" accept="image/jpeg,image/png" data-role="hoDamagePhotoInput" data-row="${row.id}">
-      </label>
+      <div class="ho-photo-add-row">
+        <label class="file-input-label">
+          📷 Fotó készítése
+          <input type="file" accept="image/*" capture="environment" data-role="hoDamagePhotoInput" data-row="${row.id}">
+        </label>
+        <label class="file-input-label">
+          + Kép feltöltése (galéria/mappa)
+          <input type="file" accept="image/jpeg,image/png" data-role="hoDamagePhotoInput" data-row="${row.id}">
+        </label>
+      </div>
       <div class="ho-photo-preview">
         ${row.photos.map((p, i) => `
           <div>
@@ -782,21 +813,147 @@ function renderDamageCards() {
 
 document.getElementById('hoAddDamageRowBtn').addEventListener('click', () => {
   const helyek = (window.HANDOVER_CONFIG && window.HANDOVER_CONFIG.serulesHelyek) || [];
-  const tipusok = (window.HANDOVER_CONFIG && window.HANDOVER_CONFIG.serulesTipusok) || [];
   const modok = (window.HANDOVER_CONFIG && window.HANDOVER_CONFIG.javitasModjai) || [];
   hoDamageRows.push({
     id: uid(),
     hely: helyek[0] ? helyek[0].kod : '',
-    tipus: tipusok[0] || '',
+    tipus: HO_MARKER_TYPES[0].label,
     javitasModja: modok[0] || '',
     rogzitve: 'IGEN',
     javitasSzukseges: 'NEM',
-    raSzam: '',
-    felszOsszeg: 0,
     photos: [],
   });
   renderDamageCards();
 });
+
+// ---------------- Kártörténet — kártörténeti sérülés-kártyák ----------------
+//
+// Reuses the same photo-add (camera+gallery) mechanism as "Sérülések
+// fotókkal", and the same damage-type list as the marking palette — but
+// instead of a "javítás szükséges?" question, this has a free-text comment
+// field and a settable "javítva van-e" (already repaired) toggle.
+
+function renderKartortenetCards() {
+  const container = document.getElementById('hoKartortenetCards');
+  if (!container) return;
+  const helyek = (window.HANDOVER_CONFIG && window.HANDOVER_CONFIG.serulesHelyek) || [];
+  const tipusok = HO_MARKER_TYPES.map(m => m.label);
+
+  if (hoKartortenetRows.length === 0) {
+    container.innerHTML = '<div class="empty-state small">Nincs rögzített sérülés a kártörténetben.</div>';
+    return;
+  }
+
+  container.innerHTML = hoKartortenetRows.map(row => `
+    <div class="ho-damage-card" data-row="${row.id}">
+      <div class="form-row">
+        <div><label>Hely</label>
+          <select data-role="hoKartortenetRowField" data-row="${row.id}" data-field="hely">
+            ${helyek.map(h => `<option value="${escapeHtml(h.kod)}" ${row.hely === h.kod ? 'selected' : ''}>${escapeHtml(h.kod)} — ${escapeHtml(h.nev)}</option>`).join('')}
+          </select>
+        </div>
+        <div><label>Sérülés megnevezése</label>
+          <select data-role="hoKartortenetRowField" data-row="${row.id}" data-field="tipus">
+            ${tipusok.map(t => `<option value="${escapeHtml(t)}" ${row.tipus === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('')}
+          </select>
+        </div>
+        <div><label>Javítva van?</label>
+          <select data-role="hoKartortenetRowField" data-row="${row.id}" data-field="javitva">
+            <option value="IGEN" ${row.javitva === 'IGEN' ? 'selected' : ''}>IGEN</option>
+            <option value="NEM" ${row.javitva === 'NEM' ? 'selected' : ''}>NEM</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div style="flex:1;"><label>Megjegyzés</label>
+          <textarea data-role="hoKartortenetRowField" data-row="${row.id}" data-field="megjegyzes" rows="2" style="width:100%;" placeholder="Szabad szöveges megjegyzés a sérülésről...">${escapeHtml(row.megjegyzes)}</textarea>
+        </div>
+      </div>
+      <div class="ho-photo-add-row">
+        <label class="file-input-label">
+          📷 Fotó készítése
+          <input type="file" accept="image/*" capture="environment" data-role="hoKartortenetPhotoInput" data-row="${row.id}">
+        </label>
+        <label class="file-input-label">
+          + Kép feltöltése (galéria/mappa)
+          <input type="file" accept="image/jpeg,image/png" data-role="hoKartortenetPhotoInput" data-row="${row.id}">
+        </label>
+      </div>
+      <div class="ho-photo-preview">
+        ${row.photos.map((p, i) => `
+          <div>
+            <img src="${p.dataUrl}" class="ho-photo-thumb" alt="sérülés fotó">
+            <input type="text" value="${escapeHtml(p.caption)}" placeholder="Felirat / megjegyzés" data-role="hoKartortenetPhotoCaption" data-row="${row.id}" data-index="${i}">
+            <button class="rm-btn" data-role="hoKartortenetPhotoRemove" data-row="${row.id}" data-index="${i}">✕ kép törlése</button>
+          </div>
+        `).join('')}
+      </div>
+      <button class="btn ghost small" data-role="hoRemoveKartortenetRow" data-row="${row.id}" style="margin-top:10px;">✕ Sérülés törlése</button>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('[data-role="hoKartortenetRowField"]').forEach(el => {
+    el.addEventListener('input', () => {
+      const row = hoKartortenetRows.find(r => String(r.id) === el.dataset.row);
+      if (row) row[el.dataset.field] = el.value;
+    });
+  });
+  container.querySelectorAll('[data-role="hoRemoveKartortenetRow"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      hoKartortenetRows = hoKartortenetRows.filter(r => String(r.id) !== btn.dataset.row);
+      renderKartortenetCards();
+    });
+  });
+  container.querySelectorAll('[data-role="hoKartortenetPhotoInput"]').forEach(input => {
+    input.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const row = hoKartortenetRows.find(r => String(r.id) === input.dataset.row);
+      if (!row) return;
+      const rawDataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const { dataUrl, aspect } = await compressImageDataUrl(rawDataUrl, 1200, 0.75);
+      row.photos.push({ dataUrl, aspect, caption: '' });
+      renderKartortenetCards();
+    });
+  });
+  container.querySelectorAll('[data-role="hoKartortenetPhotoCaption"]').forEach(input => {
+    input.addEventListener('input', () => {
+      const row = hoKartortenetRows.find(r => String(r.id) === input.dataset.row);
+      const idx = parseInt(input.dataset.index, 10);
+      if (row && row.photos[idx]) row.photos[idx].caption = input.value;
+    });
+  });
+  container.querySelectorAll('[data-role="hoKartortenetPhotoRemove"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const row = hoKartortenetRows.find(r => String(r.id) === btn.dataset.row);
+      const idx = parseInt(btn.dataset.index, 10);
+      if (row) row.photos.splice(idx, 1);
+      renderKartortenetCards();
+    });
+  });
+}
+
+const hoAddKartortenetRowBtnEl = document.getElementById('hoAddKartortenetRowBtn');
+if (hoAddKartortenetRowBtnEl) {
+  hoAddKartortenetRowBtnEl.addEventListener('click', () => {
+    const helyek = (window.HANDOVER_CONFIG && window.HANDOVER_CONFIG.serulesHelyek) || [];
+    hoKartortenetRows.push({
+      id: uid(),
+      hely: helyek[0] ? helyek[0].kod : '',
+      tipus: HO_MARKER_TYPES[0].label,
+      megjegyzes: '',
+      javitva: 'NEM',
+      photos: [],
+    });
+    renderKartortenetCards();
+  });
+}
+
 
 // ---------------- GPS location stamp + reverse geocoding (postal address) ----------------
 //
@@ -864,23 +1021,228 @@ function hoPreloadVehicleImages(vehicleType) {
   })));
 }
 
+// ---------------- Állapotfelmérés/Átadás-átvétel mentése és betöltése ----------------
+//
+// Lets an inspector fill out an "Állapotfelmérés" on-site, save the entire
+// form as a .json file, and later reopen it (even in a different session)
+// to switch the mode to "Kombinált"/"Átadás-átvétel" and finish it as a
+// full handover document — nothing entered so far gets lost.
+
+function hoExportStateData() {
+  const state = { fields: {}, mode: null, blockToggles: {}, tires: getTireData(), marks: hoCarMarks, damageRows: hoDamageRows, kartortenetRows: hoKartortenetRows, checklist: {}, signatures: {} };
+
+  document.querySelectorAll('#handoverScreen input[id^="ho"], #handoverScreen select[id^="ho"], #handoverScreen textarea[id^="ho"]').forEach(el => {
+    if (el.type === 'checkbox') state.fields[el.id] = el.checked;
+    else if (el.type !== 'radio' && el.type !== 'file') state.fields[el.id] = el.value;
+  });
+
+  const modeChecked = document.querySelector('input[name="hoMode"]:checked');
+  state.mode = modeChecked ? modeChecked.value : 'atadas';
+
+  document.querySelectorAll('[data-role="hoBlockToggle"]').forEach(cb => {
+    state.blockToggles[cb.dataset.block] = cb.checked;
+  });
+
+  state.checklist.felszereltseg = [...document.querySelectorAll('[data-role="hoFelszereltseg"]')].map(cb => ({ name: cb.dataset.name, checked: cb.checked }));
+  state.checklist.tartozekok = [...document.querySelectorAll('[data-role="hoTartozek"]')].map(cb => ({ name: cb.dataset.name, checked: cb.checked }));
+
+  ['hoSigAtado', 'hoSigAtvevo', 'hoSigInspektor'].forEach(id => {
+    const canvas = document.getElementById(id);
+    if (canvas && typeof canvas.toDataURL === 'function') {
+      try { state.signatures[id] = canvas.toDataURL('image/png'); } catch (err) { /* ignore */ }
+    }
+  });
+
+  return state;
+}
+
+function hoImportStateData(state) {
+  if (!state || typeof state !== 'object') throw new Error('Érvénytelen mentés-fájl.');
+
+  if (state.mode) {
+    const radio = document.querySelector('input[name="hoMode"][value="' + state.mode + '"]');
+    if (radio) radio.checked = true;
+  }
+
+  Object.keys(state.fields || {}).forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.type === 'checkbox') el.checked = !!state.fields[id];
+    else el.value = state.fields[id];
+  });
+
+  // Vehicle-type-dependent UI (tire table DOM, car diagram) must be rebuilt
+  // AFTER hoVehicleType's value is restored above.
+  renderTireTable();
+  renderFelszereltsegChecklist();
+  renderTartozekokChecklist();
+
+  Object.keys(state.blockToggles || {}).forEach((block) => {
+    const cb = document.querySelector('[data-role="hoBlockToggle"][data-block="' + block + '"]');
+    if (cb) cb.checked = !!state.blockToggles[block];
+  });
+  applyModeVisibility();
+  applyBlockToggles();
+
+  if (state.tires) {
+    Object.keys(state.tires).forEach((tireKod) => {
+      Object.keys(state.tires[tireKod] || {}).forEach((field) => {
+        const el = document.querySelector('[data-role="hoTireField"][data-tire="' + tireKod + '"][data-field="' + field + '"]');
+        if (el) el.value = state.tires[tireKod][field];
+      });
+    });
+  }
+
+  (state.checklist && state.checklist.felszereltseg || []).forEach((item) => {
+    const cb = document.querySelector('[data-role="hoFelszereltseg"][data-name="' + item.name.replace(/"/g, '\\"') + '"]');
+    if (cb) cb.checked = !!item.checked;
+  });
+  (state.checklist && state.checklist.tartozekok || []).forEach((item) => {
+    const cb = document.querySelector('[data-role="hoTartozek"][data-name="' + item.name.replace(/"/g, '\\"') + '"]');
+    if (cb) cb.checked = !!item.checked;
+  });
+
+  hoCarMarks = Array.isArray(state.marks) ? state.marks : [];
+  drawCarDiagram();
+  renderMarksList();
+
+  hoDamageRows = Array.isArray(state.damageRows) ? state.damageRows : [];
+  renderDamageCards();
+  renderKartortenetCards();
+
+  hoKartortenetRows = Array.isArray(state.kartortenetRows) ? state.kartortenetRows : [];
+  renderKartortenetCards();
+
+  Object.keys(state.signatures || {}).forEach((id) => {
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    const img = new Image();
+    img.onload = () => {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    };
+    img.src = state.signatures[id];
+  });
+}
+
+const hoSaveStateBtnEl = document.getElementById('hoSaveStateBtn');
+if (hoSaveStateBtnEl) {
+  hoSaveStateBtnEl.addEventListener('click', () => {
+    const state = hoExportStateData();
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const rendszamPart = (document.getElementById('hoRendszam').value || 'jarmu').replace(/[^a-zA-Z0-9-]/g, '');
+    a.href = url;
+    a.download = 'allapotfelmeres_' + rendszamPart + '_' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast('Mentve — a fájl később betölthető és folytatható/bővíthető.');
+  });
+}
+
+const hoLoadStateInputEl = document.getElementById('hoLoadStateInput');
+if (hoLoadStateInputEl) {
+  hoLoadStateInputEl.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const state = JSON.parse(text);
+      hoImportStateData(state);
+      showToast('Betöltve — a mód váltásával (pl. Kombinált) bővítheted átadás-átvételi jegyzőkönyvvé.');
+    } catch (err) {
+      showToast('Hiba a fájl betöltése közben: ' + err.message, true);
+    }
+    e.target.value = '';
+  });
+}
+
+
 document.getElementById('hoGenerateReportBtn').addEventListener('click', async () => {
   if (!document.getElementById('hoRendszam').value.trim()) {
     showToast('Add meg legalább a rendszámot.', true);
     return;
   }
-  if (!document.getElementById('hoLegalAck').checked) {
+  if (hoGetMode() !== 'kartortenet' && !document.getElementById('hoLegalAck').checked) {
     showToast('A jogi nyilatkozat elfogadása nélkül nem generálható riport.', true);
     return;
   }
   try {
     await hoPreloadVehicleImages(document.getElementById('hoVehicleType').value);
     buildHandoverPdf();
-    showToast('Riport (PDF) generálva.');
+    showToast('PDF létrehozva.');
+    const restartBtn = document.getElementById('hoStartNewCarBtn');
+    if (restartBtn) restartBtn.disabled = false;
   } catch (err) {
     showToast('Hiba a riport előállítása közben: ' + err.message, true);
   }
 });
+
+// Resets the entire form so the same screen can be reused for the next
+// vehicle, without leaving any stale data from the previous handover behind.
+function hoResetFormForNewCar() {
+  if (!confirm('Biztosan új autóval kezded? Minden jelenlegi adat (kitöltött mezők, jelölések, fotók) elvész, ha nem mentetted el.')) return;
+
+  document.querySelectorAll('#handoverScreen input[id^="ho"], #handoverScreen select[id^="ho"], #handoverScreen textarea[id^="ho"]').forEach((el) => {
+    if (el.type === 'checkbox') el.checked = false;
+    else if (el.type === 'file') el.value = '';
+    else if (el.tagName === 'SELECT') el.selectedIndex = 0;
+    else el.value = '';
+  });
+  document.querySelectorAll('[data-role="hoBlockToggle"]').forEach((cb) => { cb.checked = true; });
+  document.querySelector('input[name="hoMode"][value="atadas"]').checked = true;
+
+  hoCarMarks = [];
+  hoDamageRows = [];
+  hoKartortenetRows = [];
+  document.getElementById('hoJegkarMerteke').style.display = 'none';
+
+  ['hoSigAtado', 'hoSigAtvevo', 'hoSigInspektor'].forEach((id) => {
+    const canvas = document.getElementById(id);
+    if (canvas && typeof canvas.getContext === 'function') {
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  });
+
+  applyModeVisibility();
+  applyBlockToggles();
+  renderFelszereltsegChecklist();
+  renderTartozekokChecklist();
+  renderTireTable();
+  renderDamageCards();
+  renderKartortenetCards();
+  renderMarkerPalette();
+  drawCarDiagram();
+  renderMarksList();
+
+  // Defaults that should always be re-applied, matching the initial load.
+  const today = todayISODate();
+  document.getElementById('hoLejelentve').value = today;
+  document.getElementById('hoElszallitva').value = today;
+  document.getElementById('hoServiceIdopontja').value = today;
+  document.getElementById('hoSzemleIdopontja').value = today;
+  if (typeof currentUserFullName === 'function') {
+    const fullName = currentUserFullName();
+    document.getElementById('hoSzemlezo').value = fullName;
+    document.getElementById('hoInspektorNev').value = fullName;
+  }
+  document.getElementById('hoAtadoNev').value = 'Wallis Autókölcsönző Kft.';
+  document.getElementById('hoAtadoSzekhely').value = '1138 Budapest, Váci út 141.';
+  document.getElementById('hoAtadoAdoszam').value = '12712234-2-42';
+
+  document.getElementById('hoStartNewCarBtn').disabled = true;
+  document.getElementById('hoRendszam').scrollIntoView({ block: 'center' });
+  showToast('Új autóval kezdheted — az űrlap kiürült.');
+}
+
+const hoStartNewCarBtnEl = document.getElementById('hoStartNewCarBtn');
+if (hoStartNewCarBtnEl) hoStartNewCarBtnEl.addEventListener('click', hoResetFormForNewCar);
 
 function buildHandoverPdf() {
   const { jsPDF } = window.jspdf;
@@ -1092,10 +1454,60 @@ function buildHandoverPdf() {
     doc.setFontSize(8.8);
     doc.setTextColor(...TEXT_MUTED);
     const details = 'Javítás módja: ' + row.javitasModja + '   ·   Rögzítve: ' + row.rogzitve +
-      '   ·   Javítás szükséges: ' + row.javitasSzukseges +
-      (row.raSzam ? '   ·   RA: ' + row.raSzam : '') +
-      (row.felszOsszeg ? '   ·   ' + Math.round(row.felszOsszeg).toLocaleString('hu-HU') + ' Ft' : '');
+      '   ·   Javítás szükséges: ' + row.javitasSzukseges;
     doc.text(details, marginX + padX, y + padY + 8 + headerH);
+
+    let py = y + padY + headerH + detailH + 10;
+    row.photos.forEach((p, i) => {
+      const layout = photoLayout[i];
+      const imgX = marginX + padX;
+      const capX = marginX + padX + leftColW + photoGap;
+      try { doc.addImage(p.dataUrl, imgX, py, leftColW, layout.imgH); } catch (err) { /* unsupported format — skip */ }
+      if (layout.captionLines.length) {
+        doc.setFontSize(9);
+        doc.setTextColor(...TEXT_MUTED);
+        doc.text(layout.captionLines, capX, py + 11);
+      }
+      py += layout.rowH + rowGap;
+    });
+
+    y += cardH + 16;
+  }
+
+  function kartortenetDamageCard(row, index) {
+    const padX = 16, padY = 13, headerH = 16;
+    const photoGap = 16, rowGap = 14, maxPhotoH = 260;
+    const leftColW = (contentW - padX * 2 - photoGap) / 2;
+    const rightColW = leftColW;
+
+    const megjegyzesLines = row.megjegyzes ? doc.splitTextToSize(row.megjegyzes, contentW - padX * 2) : ['na.'];
+    const detailH = megjegyzesLines.length * 11 + 4;
+
+    const photoLayout = row.photos.map(p => {
+      const aspect = p.aspect || 4 / 3;
+      const imgH = Math.min(maxPhotoH, leftColW / aspect);
+      const captionLines = p.caption ? doc.splitTextToSize(p.caption, rightColW) : [];
+      const captionH = captionLines.length * 11;
+      return { imgH, captionLines, rowH: Math.max(imgH, captionH) };
+    });
+    const photosH = photoLayout.reduce((sum, p) => sum + p.rowH + rowGap, 0);
+    const cardH = padY * 2 + headerH + detailH + (photosH > 0 ? photosH + 4 : 0);
+    ensureSpace(cardH + 14);
+    doc.setDrawColor(...RULE);
+    doc.setLineWidth(0.6);
+    doc.line(marginX, y, marginX + contentW, y);
+
+    doc.setFontSize(10.5);
+    doc.setTextColor(...TEXT_DARK);
+    doc.text((index + 1) + '. ' + row.hely + ' — ' + row.tipus, marginX, y + padY + 8);
+    doc.setFontSize(9);
+    if (row.javitva === 'IGEN') doc.setTextColor(31, 122, 77);
+    else doc.setTextColor(...TEXT_MUTED);
+    doc.text('Javítva: ' + (row.javitva || 'NEM'), marginX + contentW - 70, y + padY + 8);
+
+    doc.setFontSize(8.8);
+    doc.setTextColor(...TEXT_MUTED);
+    doc.text(megjegyzesLines, marginX + padX, y + padY + 8 + headerH);
 
     let py = y + padY + headerH + detailH + 10;
     row.photos.forEach((p, i) => {
@@ -1117,8 +1529,9 @@ function buildHandoverPdf() {
   const val = (id) => (document.getElementById(id) ? document.getElementById(id).value : '');
   const mode = hoGetMode();
   const showHandoverFields = mode === 'atadas' || mode === 'kombinalt';
-  const showInspectorFields = mode === 'allapotfelmeres' || mode === 'kombinalt';
-  const modeTitles = { atadas: 'Átadás-átvételi jegyzőkönyv', allapotfelmeres: 'Állapotfelmérés', kombinalt: 'Állapotfelmérés és átadás-átvételi jegyzőkönyv' };
+  const showInspectorFields = mode === 'allapotfelmeres' || mode === 'kombinalt' || mode === 'kartortenet';
+  const showKartortenetFields = mode === 'kartortenet';
+  const modeTitles = { atadas: 'Átadás-átvételi jegyzőkönyv', allapotfelmeres: 'Állapotfelmérés', kombinalt: 'Állapotfelmérés és átadás-átvételi jegyzőkönyv', kartortenet: 'Kártörténet' };
 
   const rendszamRaw = val('hoRendszam') || 'ATADAS';
   const reportId = 'SIXT/' + rendszamRaw.replace(/\s+/g, '').toUpperCase() + '/' + new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -1173,9 +1586,19 @@ function buildHandoverPdf() {
       { label: 'Átvevő — Képviselő', value: val('hoAtvevoKepviselo') + (val('hoAtvevoTelefon') ? ' · ' + val('hoAtvevoTelefon') : '') + (val('hoAtvevoEmail') ? ' · ' + val('hoAtvevoEmail') : '') },
     ]);
   }
+  if (showKartortenetFields) {
+    fieldCard([
+      { label: 'Megrendelés oka', value: val('hoKartortenetOk') },
+      { label: 'Igénylő neve', value: val('hoKartortenetIgenylo') },
+      { label: 'Átadó — Jogi személy', value: val('hoAtadoNev') },
+      { label: 'Átadó — Székhely', value: val('hoAtadoSzekhely') },
+      { label: 'Átadó — Adószám', value: val('hoAtadoAdoszam') },
+      { label: 'Átadó — Képviselő', value: val('hoAtadoKepviselo') + (val('hoAtadoTelefon') ? ' · ' + val('hoAtadoTelefon') : '') + (val('hoAtadoEmail') ? ' · ' + val('hoAtadoEmail') : '') },
+    ]);
+  }
   if (showInspectorFields) {
     fieldCard([
-      { label: 'Megrendelő', value: showHandoverFields ? undefined : val('hoMegrendelo') },
+      { label: 'Megrendelő', value: (showHandoverFields || showKartortenetFields) ? undefined : val('hoMegrendelo') },
       { label: 'Inspekciót végző', value: val('hoInspektorNev') },
       { label: 'Képviselt szervezet', value: val('hoInspektorSzervezet') },
       { label: 'Elérhetőség', value: (val('hoInspektorEmail') || 'na.') + ' · ' + (val('hoInspektorTelefon') || 'na.') },
@@ -1222,6 +1645,18 @@ function buildHandoverPdf() {
     ]);
   }
 
+  if (showKartortenetFields) {
+    sectionTitle('Kártörténet');
+    if (hoKartortenetRows.length === 0) {
+      doc.setFontSize(9);
+      doc.setTextColor(...TEXT_MUTED);
+      doc.text('Nincs rögzített sérülés a kártörténetben.', marginX, y);
+      y += 16;
+    } else {
+      hoKartortenetRows.forEach((r, idx) => kartortenetDamageCard(r, idx));
+    }
+  }
+
   if (hoIsBlockRelevant('felszereltseg')) {
     sectionTitle('3. Felszereltség');
     const felszereltsegItems = (window.HANDOVER_CONFIG.felszereltsegek || []).map(name => ({
@@ -1245,7 +1680,7 @@ function buildHandoverPdf() {
     const tireData = getTireData();
     fieldCard(HO_TIRE_POSITIONS.map(pos => {
       const t = tireData[pos.kod];
-      return { label: pos.kod + ' — ' + pos.nev, value: (t.felniTipus || 'na.') + '  ·  ' + (t.meret || 'na.') + '  ·  ' + (t.menetmelyseg || 'na.') + ' mm' };
+      return { label: pos.kod + ' — ' + pos.nev, value: (t.felniTipus || 'na.') + '  ·  ' + (t.meret || 'na.') + '  ·  ' + (t.abroncsMarka || 'na.') + '  ·  ' + (t.menetmelyseg || 'na.') + ' mm' };
     }));
   }
 
@@ -1327,18 +1762,26 @@ function buildHandoverPdf() {
     doc.line(marginX, y, marginX + contentW, y);
     y += 14;
 
-    // Marks list: every placed marking, described in plain Hungarian
-    if (hoCarMarks.length === 0) {
+    // Marks list: every placed marking, described in plain Hungarian —
+    // plus the "gépkocsi jégkáros" toggle, listed alongside the marked
+    // damages the same way it appears on-screen.
+    const jegkarChecked = document.getElementById('hoJegkarCheckbox') && document.getElementById('hoJegkarCheckbox').checked;
+    const jegkarMertek = document.getElementById('hoJegkarMerteke') ? document.getElementById('hoJegkarMerteke').value.trim() : '';
+    const jegkarLine = jegkarChecked ? 'Jégkár' + (jegkarMertek ? ' — ' + jegkarMertek : '') : null;
+    const markLines = hoCarMarks.map((m) => hoClassifyMark(m));
+    if (jegkarLine) markLines.push(jegkarLine);
+
+    if (markLines.length === 0) {
       doc.setFontSize(9);
       doc.setTextColor(...TEXT_MUTED);
       doc.text('Nincs jelölt sérülés a rajzon.', marginX, y);
       y += 16;
     } else {
-      hoCarMarks.forEach((m, idx) => {
+      markLines.forEach((text, idx) => {
         ensureSpace(14);
         doc.setFontSize(9.3);
         doc.setTextColor(...TEXT_DARK);
-        doc.text((idx + 1) + '. ' + hoClassifyMark(m), marginX, y);
+        doc.text((idx + 1) + '. ' + text, marginX, y);
         y += 14;
       });
       y += 4;
@@ -1346,7 +1789,7 @@ function buildHandoverPdf() {
   }
 
   if (hoIsBlockRelevant('nemelfogadhato')) {
-    sectionTitle('8. Nem elfogadható hibák');
+    sectionTitle('8. Sérülések fotókkal');
     if (hoDamageRows.length === 0) {
       doc.setFontSize(9);
       doc.setTextColor(...TEXT_MUTED);
@@ -1354,29 +1797,34 @@ function buildHandoverPdf() {
       y += 16;
     } else {
       hoDamageRows.forEach((r, idx) => damageCard(r, idx));
-      const totalCost = hoDamageRows.reduce((s, r) => s + (r.felszOsszeg || 0), 0);
-      if (totalCost > 0) {
-        bigNumberCard('Összesen becsült javítási költség', Math.round(totalCost).toLocaleString('hu-HU') + ' Ft', hoDamageRows.length + ' rögzített sérülés alapján');
-      }
     }
   }
 
-  sectionTitle('9. Tartozékok átadva');
-  const tartozekItems = [{ name: 'Kulcsok: ' + (val('hoKulcsokDb') || '0') + ' db', checked: true }]
-    .concat([...document.querySelectorAll('[data-role="hoTartozek"]')].map(cb => ({ name: cb.dataset.name, checked: cb.checked })));
-  checklistCard(tartozekItems);
+  if (!showKartortenetFields) {
+    sectionTitle('9. Tartozékok átadva');
+    const tartozekItems = [{ name: 'Kulcsok: ' + (val('hoKulcsokDb') || '0') + ' db', checked: true }]
+      .concat([...document.querySelectorAll('[data-role="hoTartozek"]')].map(cb => ({ name: cb.dataset.name, checked: cb.checked })));
+    checklistCard(tartozekItems);
+  }
 
-  sectionTitle('10. Megjegyzések, sérülések, hiányok');
-  fieldCard([{ label: 'Megjegyzés', value: val('hoMegjegyzes') }]);
+  if (hoIsBlockRelevant('belsoserulesek')) {
+    sectionTitle('10. Belső sérülések');
+    fieldCard([{ label: 'Leírás', value: val('hoBelsoSerulesek') }]);
+  }
 
-  sectionTitle('11. Jogi nyilatkozat');
-  fieldCard([
-    { label: 'Nyilatkozat', value: 'Tájékoztatom, hogy a fent említett rendszámú autóról 10 naptári nap múlva a biztosítások (KGFB és Casco) lemondásra kerülnek, ezt követően nem áll módunkban biztosítási kárigényt elfogadnunk.' },
-    { label: 'Tudomásul vettem', value: document.getElementById('hoLegalAck').checked ? 'IGEN' : 'NEM' },
-  ]);
+  if (!showKartortenetFields) {
+    sectionTitle('11. Megjegyzések, sérülések, hiányok');
+    fieldCard([{ label: 'Megjegyzés', value: val('hoMegjegyzes') }]);
 
-  if (showInspectorFields) {
-    sectionTitle('12. Szemle');
+    sectionTitle('12. Jogi nyilatkozat');
+    fieldCard([
+      { label: 'Nyilatkozat', value: 'Tájékoztatom, hogy a fent említett rendszámú autóról 10 naptári nap múlva a biztosítások (KGFB és Casco) lemondásra kerülnek, ezt követően nem áll módunkban biztosítási kárigényt elfogadnunk.' },
+      { label: 'Tudomásul vettem', value: document.getElementById('hoLegalAck').checked ? 'IGEN' : 'NEM' },
+    ]);
+  }
+
+  if (showInspectorFields && !showKartortenetFields) {
+    sectionTitle('13. Szemle');
     fieldCard([
       { label: 'Szemle helye', value: val('hoSzemleHelye') },
       { label: 'Szemléző', value: val('hoSzemlezo') },
@@ -1384,7 +1832,7 @@ function buildHandoverPdf() {
     ]);
   }
 
-  sectionTitle('13. Hely, idő és aláírások');
+  sectionTitle('14. Hely, idő és aláírások');
   const cimResz = [val('hoCimIranyitoszam'), val('hoCimUtca'), val('hoCimHazszam')].filter(Boolean).join(' ');
   fieldCard([
     { label: 'Hely (GPS)', value: val('hoLocation') },
@@ -1449,7 +1897,7 @@ function buildHandoverPdf() {
   }
 
   const rendszamPart = (val('hoRendszam') || 'jarmu').replace(/[^a-zA-Z0-9-]/g, '');
-  const modeFileSlug = { atadas: 'atadas_atveteli_jegyzokonyv', allapotfelmeres: 'allapotfelmeres', kombinalt: 'allapotfelmeres_es_atadas_atveteli_jegyzokonyv' };
+  const modeFileSlug = { atadas: 'atadas_atveteli_jegyzokonyv', allapotfelmeres: 'allapotfelmeres', kombinalt: 'allapotfelmeres_es_atadas_atveteli_jegyzokonyv', kartortenet: 'kartortenet' };
   const MAX_PDF_BYTES = 5 * 1024 * 1024;
   let sizeBytes = 0;
   try { sizeBytes = doc.output('arraybuffer').byteLength; } catch (err) { /* size check is best-effort */ }

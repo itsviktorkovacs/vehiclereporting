@@ -5,8 +5,18 @@
 <title>Fleet Control — SIXT</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="assets/css/style.css">
+<!-- PWA: installable app metadata -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ff5000">
+<link rel="icon" href="assets/icons/icon-192.png">
+<!-- iOS Safari doesn't read manifest.json for install behavior — these tags are required separately -->
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fleet Control">
 </head>
 <body>
+
 
 <!-- ===================== LOGIN SCREEN ===================== -->
 <section id="screen-login">
@@ -34,6 +44,10 @@
 
 <!-- ===================== MAIN SCREEN ===================== -->
 <section id="screen-main">
+  <div class="ho-ios-install-banner" id="iosInstallBanner" style="display:none;">
+    <span>📲 Telepítsd az appot: koppints a <strong>Megosztás</strong> gombra alul, majd válaszd: <strong>„Kezdőképernyőhöz hozzáadás”</strong>.</span>
+    <button type="button" id="iosInstallBannerClose" aria-label="Bezárás">✕</button>
+  </div>
   <div class="topbar">
     <div class="brand">
       <img src="assets/img/sixt-logo-neg.png" alt="SIXT" class="sixt-logo">
@@ -55,6 +69,7 @@
       <button class="btn ghost" data-role="capacityOnlyAction" id="exportExcelBtn">Excel export</button>
       <button class="btn ghost" data-role="capacityOnlyAction" id="exportIcsBtn">Outlook naptár export</button>
       <button class="btn ghost" data-role="capacityOnlyAction" id="exportPdfBtn">PDF export</button>
+      <button class="btn ghost" id="pwaInstallBtn" disabled>⬇ Telepítés</button>
       <button class="btn danger icon-btn" id="logoutBtn" title="Kijelentkezés" aria-label="Kijelentkezés">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       </button>
@@ -235,6 +250,7 @@
             <label><input type="radio" name="hoMode" value="atadas" checked><span>Átadás-átvétel</span></label>
             <label><input type="radio" name="hoMode" value="allapotfelmeres"><span>Állapotfelmérés</span></label>
             <label><input type="radio" name="hoMode" value="kombinalt"><span>Kombinált</span></label>
+            <label><input type="radio" name="hoMode" value="kartortenet"><span>Kártörténet</span></label>
           </div>
           <div class="ho-brand-select-wrap">
             <label for="hoBrandSelect" class="ho-brand-select-label">Márka a PDF fejlécén</label>
@@ -246,6 +262,13 @@
               <option value="chauffeur">SIXT chauffeur service</option>
             </select>
           </div>
+          <div class="ho-save-load-wrap">
+            <button type="button" class="btn ghost small" id="hoSaveStateBtn">💾 Mentés (folytatható)</button>
+            <label class="btn ghost small file-input-label" style="margin:0;">
+              📂 Betöltés
+              <input type="file" id="hoLoadStateInput" accept="application/json">
+            </label>
+          </div>
         </div>
 
         <div class="ho-card">
@@ -254,9 +277,14 @@
           <div><label>Megrendelő</label><input type="text" id="hoMegrendelo" placeholder="pl. Nelson Flottalizing Kft"></div>
         </div>
 
-        <div data-ho-modes="atadas kombinalt">
+        <div class="form-row" data-ho-modes="kartortenet">
+          <div><label>Megrendelés oka</label><input type="text" id="hoKartortenetOk" placeholder="pl. biztosítási kárigény, belső ellenőrzés..."></div>
+          <div><label>Igénylő neve</label><input type="text" id="hoKartortenetIgenylo"></div>
+        </div>
+
+        <div>
           <div class="grid-cols-2">
-            <div class="ho-party-block">
+            <div class="ho-party-block" data-ho-modes="atadas kombinalt kartortenet">
               <div class="ho-party-title">Átadó</div>
               <div class="form-row"><div><label>Jogi személy neve</label><input type="text" id="hoAtadoNev" placeholder="pl. XY Kft. / Rent a Car"></div></div>
               <div class="form-row"><div><label>Székhelye</label><input type="text" id="hoAtadoSzekhely" placeholder="pl. 1117 Budapest, ..."></div></div>
@@ -267,7 +295,7 @@
                 <div><label>Email címe</label><input type="email" id="hoAtadoEmail"></div>
               </div>
             </div>
-            <div class="ho-party-block">
+            <div class="ho-party-block" data-ho-modes="atadas kombinalt">
               <div class="ho-party-title">Átvevő</div>
               <div class="form-row"><div><label>Jogi személy neve</label><input type="text" id="hoAtvevoNev" placeholder="pl. TU Kft."></div></div>
               <div class="form-row"><div><label>Székhelye</label><input type="text" id="hoAtvevoSzekhely" placeholder="pl. Külső Veszprémi út 6."></div></div>
@@ -281,7 +309,7 @@
           </div>
         </div>
 
-        <div data-ho-modes="allapotfelmeres kombinalt">
+        <div data-ho-modes="allapotfelmeres kombinalt kartortenet">
           <div class="ho-party-block">
             <div class="ho-party-title">Inspekciót végző</div>
             <div class="form-row">
@@ -301,7 +329,7 @@
 <div class="ho-card">
 <div class="ho-section-title">2. Jármű adatok</div>
         <div class="form-row">
-          <div class="ho-autocomplete-wrap">
+          <div class="ho-autocomplete-wrap ho-emphasis-field">
             <label>Rendszám</label>
             <input type="text" id="hoRendszam" placeholder="pl. AIBD-904" autocomplete="off">
             <div id="hoRendszamSuggestions" class="ho-autocomplete-list"></div>
@@ -355,13 +383,14 @@
           <div><label>Első forgalomba helyezés ideje</label><input type="date" id="hoElsoForgalomba"></div>
         </div>
         <div class="form-row">
-          <div><label>Km-óra állása</label><input type="number" id="hoKmOra" min="0"></div>
-          <div>
+          <div class="ho-emphasis-field"><label>Km-óra állása</label><input type="number" id="hoKmOra" min="0"></div>
+          <div class="ho-emphasis-field">
             <label>Üzemanyagszint</label>
             <select id="hoUzemanyag">
+              <option value="" selected>— üres —</option>
               <option value="1/8">1/8</option><option value="2/8">2/8</option><option value="3/8">3/8</option>
               <option value="4/8">4/8</option><option value="5/8">5/8</option><option value="6/8">6/8</option>
-              <option value="7/8">7/8</option><option value="8/8" selected>8/8</option>
+              <option value="7/8">7/8</option><option value="8/8">8/8</option>
             </select>
           </div>
           <div><label>Műszaki vizsga érvényessége</label><input type="date" id="hoMuszakiErvenyesseg"></div>
@@ -387,7 +416,14 @@
         
 </div>
 
-<div class="ho-card">
+<div class="ho-card" data-ho-modes="kartortenet">
+<div class="ho-section-title">Kártörténet</div>
+        <div id="hoKartortenetCards"></div>
+        <button class="btn ghost small" id="hoAddKartortenetRowBtn" type="button" style="margin-top:10px;">+ Sérülés hozzáadása</button>
+</div>
+
+
+<div class="ho-card" data-ho-modes="atadas allapotfelmeres kombinalt">
 <div class="ho-section-title-row">
   <div class="ho-section-title">3. Felszereltség</div>
   <label class="ho-ios-toggle" title="Releváns"><input type="checkbox" data-role="hoBlockToggle" data-block="felszereltseg" checked><span class="ho-ios-toggle-track"><span class="ho-ios-toggle-thumb"></span></span></label>
@@ -397,7 +433,7 @@
 </div>
 </div>
 
-<div class="ho-card">
+<div class="ho-card" data-ho-modes="atadas allapotfelmeres kombinalt">
 <div class="ho-section-title-row">
   <div class="ho-section-title">4. Kerekek</div>
   <label class="ho-ios-toggle" title="Releváns"><input type="checkbox" data-role="hoBlockToggle" data-block="muszaki" checked><span class="ho-ios-toggle-track"><span class="ho-ios-toggle-thumb"></span></span></label>
@@ -424,20 +460,20 @@
 </div>
 </div>
 
-<div class="ho-card">
+<div class="ho-card" data-ho-modes="atadas allapotfelmeres kombinalt">
 <div class="ho-section-title-row">
   <div class="ho-section-title">5. Abroncsok</div>
   <label class="ho-ios-toggle" title="Releváns"><input type="checkbox" data-role="hoBlockToggle" data-block="abroncsok" checked><span class="ho-ios-toggle-track"><span class="ho-ios-toggle-thumb"></span></span></label>
 </div>
 <div data-block-body="abroncsok">
         <table class="jobs-table" id="hoTireTable">
-          <thead><tr><th>Pozíció</th><th>Felni típusa</th><th>Méretek</th><th class="num">Menetmélység (mm)</th></tr></thead>
+          <thead><tr><th>Pozíció</th><th>Felni típusa</th><th>Méretek</th><th>Abroncs márka</th><th class="num">Menetmélység (mm)</th></tr></thead>
           <tbody id="hoTireTableBody"></tbody>
         </table>
 </div>
 </div>
 
-<div class="ho-card">
+<div class="ho-card" data-ho-modes="atadas allapotfelmeres kombinalt">
 <div class="ho-section-title-row">
   <div class="ho-section-title">6. Utolsó szervizelés adatai</div>
   <label class="ho-ios-toggle" title="Releváns"><input type="checkbox" data-role="hoBlockToggle" data-block="szerviz" checked><span class="ho-ios-toggle-track"><span class="ho-ios-toggle-thumb"></span></span></label>
@@ -451,7 +487,7 @@
 </div>
 </div>
 
-<div class="ho-card">
+<div class="ho-card" data-ho-modes="atadas allapotfelmeres kombinalt">
 <div class="ho-section-title-row">
   <div class="ho-section-title">7. Sérülések bejelölése</div>
   <label class="ho-ios-toggle" title="Releváns"><input type="checkbox" data-role="hoBlockToggle" data-block="serulesrajz" checked><span class="ho-ios-toggle-track"><span class="ho-ios-toggle-thumb"></span></span></label>
@@ -474,6 +510,11 @@
           vázlatok (nem márka-specifikus gyári vonalrajzok).
         </p>
         <div class="ho-marker-palette" id="hoMarkerPalette"></div>
+        <div class="ho-hail-damage-row">
+          <label class="ho-ios-toggle" title="A gépkocsi jégkáros"><input type="checkbox" id="hoJegkarCheckbox"><span class="ho-ios-toggle-track"><span class="ho-ios-toggle-thumb"></span></span></label>
+          <span>A gépkocsi jégkáros</span>
+          <input type="text" id="hoJegkarMerteke" placeholder="Jégkár mértéke" style="display:none;">
+        </div>
         <div class="ho-diagram-wrap">
           <canvas id="hoCarCanvas" width="900" height="940"></canvas>
           <div class="toolbar">
@@ -488,9 +529,9 @@
 </div>
 </div>
 
-<div class="ho-card">
+<div class="ho-card" data-ho-modes="atadas allapotfelmeres kombinalt">
 <div class="ho-section-title-row">
-  <div class="ho-section-title">8. Nem elfogadható hibák</div>
+  <div class="ho-section-title">8. Sérülések fotókkal</div>
   <label class="ho-ios-toggle" title="Releváns"><input type="checkbox" data-role="hoBlockToggle" data-block="nemelfogadhato" checked><span class="ho-ios-toggle-track"><span class="ho-ios-toggle-thumb"></span></span></label>
 </div>
 <div data-block-body="nemelfogadhato">
@@ -499,7 +540,7 @@
 </div>
 </div>
 
-<div class="ho-card">
+<div class="ho-card" data-ho-modes="atadas allapotfelmeres kombinalt">
 <div class="ho-section-title">9. Tartozékok átadva</div>
         <div class="form-row">
           <div><label>Kulcsok (db)</label><input type="number" id="hoKulcsokDb" min="0" value="2"></div>
@@ -509,15 +550,25 @@
         
 </div>
 
-<div class="ho-card">
-<div class="ho-section-title">10. Megjegyzések, sérülések, hiányok részletezése</div>
+<div class="ho-card" data-ho-modes="atadas allapotfelmeres kombinalt">
+<div class="ho-section-title-row">
+  <div class="ho-section-title">10. Belső sérülések</div>
+  <label class="ho-ios-toggle" title="Releváns"><input type="checkbox" data-role="hoBlockToggle" data-block="belsoserulesek" checked><span class="ho-ios-toggle-track"><span class="ho-ios-toggle-thumb"></span></span></label>
+</div>
+<div data-block-body="belsoserulesek">
+        <textarea id="hoBelsoSerulesek" rows="3" style="width:100%;" placeholder="Szabad szöveges leírás a belső sérülésekről (üléshuzat, kárpit, műszerfal, stb.)..."></textarea>
+</div>
+</div>
+
+<div class="ho-card" data-ho-modes="atadas allapotfelmeres kombinalt">
+<div class="ho-section-title">11. Megjegyzések, sérülések, hiányok részletezése</div>
         <textarea id="hoMegjegyzes" rows="3" style="width:100%;" placeholder="Szabad szöveges megjegyzés..."></textarea>
 
         
 </div>
 
-<div class="ho-card">
-<div class="ho-section-title">11. Jogi nyilatkozat</div>
+<div class="ho-card" data-ho-modes="atadas allapotfelmeres kombinalt">
+<div class="ho-section-title">12. Jogi nyilatkozat</div>
         <p class="hint ho-legal-text">
           Tájékoztatom, hogy a fent említett rendszámú autóról 10 naptári nap múlva a biztosítások
           (KGFB és Casco) lemondásra kerülnek, ezt követően nem áll módunkban biztosítási kárigényt elfogadnunk.
@@ -528,7 +579,7 @@
 </div>
 
 <div class="ho-card" data-ho-modes="allapotfelmeres kombinalt">
-<div class="ho-section-title">12. Szemle</div>
+<div class="ho-section-title">13. Szemle</div>
         <div class="form-row">
           <div><label>Szemle helye</label><input type="text" id="hoSzemleHelye" placeholder="pl. Bp. Fék u."></div>
           <div><label>Szemléző</label><input type="text" id="hoSzemlezo"></div>
@@ -539,7 +590,7 @@
 </div>
 
 <div class="ho-card">
-<div class="ho-section-title">13. Hely, idő és aláírások</div>
+<div class="ho-section-title">14. Hely, idő és aláírások</div>
         <div class="form-row">
           <div>
             <label>Hely (GPS)</label>
@@ -555,21 +606,21 @@
           <div><label>Házszám</label><input type="text" id="hoCimHazszam" placeholder="automatikusan kitöltve, szerkeszthető"></div>
         </div>
         <p class="hint" id="hoCimHint" style="margin-top:-6px;"></p>
-        <div class="grid-cols-2" data-ho-modes="atadas kombinalt">
-          <div>
+        <div class="grid-cols-2">
+          <div data-ho-modes="atadas kombinalt">
             <label class="ho-sig-label">Átadó aláírása</label>
             <canvas id="hoSigAtado" class="ho-sig-canvas" width="320" height="120"></canvas>
             <input type="text" id="hoSigAtadoNev" placeholder="Aláíró neve" style="margin-top:6px;">
             <button class="btn ghost small" data-role="clearSig" data-target="hoSigAtado">Törlés</button>
           </div>
-          <div>
+          <div data-ho-modes="atadas kombinalt">
             <label class="ho-sig-label">Átvevő aláírása</label>
             <canvas id="hoSigAtvevo" class="ho-sig-canvas" width="320" height="120"></canvas>
             <input type="text" id="hoSigAtvevoNev" placeholder="Aláíró neve" style="margin-top:6px;">
             <button class="btn ghost small" data-role="clearSig" data-target="hoSigAtvevo">Törlés</button>
           </div>
         </div>
-        <div data-ho-modes="allapotfelmeres kombinalt">
+        <div data-ho-modes="allapotfelmeres kombinalt kartortenet">
           <label class="ho-sig-label">Inspekciót végző aláírása</label>
           <canvas id="hoSigInspektor" class="ho-sig-canvas" width="320" height="120"></canvas>
           <input type="text" id="hoSigInspektorNev" placeholder="Aláíró neve" style="margin-top:6px; max-width:320px;">
@@ -580,7 +631,8 @@
 </div>
 
 <div class="toolbar" style="margin-top:16px; justify-content:flex-end;">
-          <button class="btn primary" id="hoGenerateReportBtn">Riport generálása (PDF)</button>
+          <button class="btn primary" id="hoGenerateReportBtn">PDF létrehozása</button>
+          <button class="btn ghost" id="hoStartNewCarBtn" disabled>🔄 Új autóval kezdés</button>
         </div>
       </div>
     </div>
@@ -651,5 +703,6 @@
 <script src="assets/js/handover.js"></script>
 <script src="assets/data/encrypted-data.js"></script>
 <script src="assets/js/app.js"></script>
+<script src="assets/js/pwa-install.js"></script>
 </body>
 </html>
