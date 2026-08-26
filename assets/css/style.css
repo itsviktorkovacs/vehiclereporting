@@ -116,7 +116,7 @@ input, select { font-family: inherit; }
 .panel-head .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--steel); }
 .panel .hint { font-size: 12.5px; color: var(--steel); margin: 2px 0 14px; }
 
-.grid-cols-2 { display: grid; grid-template-columns: 1.1fr 1.5fr; gap: 20px; align-items: start; }
+.grid-cols-2 { display: grid; grid-template-columns: 1.1fr 1.5fr; gap: 20px; align-items: stretch; }
 @media (max-width: 900px) { .grid-cols-2 { grid-template-columns: 1fr; } }
 
 .form-row { display: flex; gap: 10px; margin-bottom: 12px; }
@@ -387,7 +387,7 @@ td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numer
   display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; color: var(--graphite);
   background: #fff; border-radius: 16px; padding: 16px 20px; margin-bottom: 12px;
 }
-.ho-party-block { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: #fff; }
+.ho-party-block { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: #fff; height: 100%; box-sizing: border-box; }
 .ho-party-title { font-size: 13px; font-weight: 700; color: var(--graphite); margin-bottom: 12px; }
 .ho-inline-checkbox { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--steel); margin-top: 5px; font-weight: 400; text-transform: none; }
 
@@ -413,7 +413,8 @@ td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numer
 .ho-mode-switch label span { pointer-events: none; }
 
 /* ---------- Per-block "Releváns" toggle ---------- */
-.ho-section-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ho-section-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.ho-section-title-row .ho-section-title { margin-bottom: 0; }
 .ho-block-toggle { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--steel); cursor: pointer; }
 .ho-block-toggle input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 [data-block-body] { transition: opacity .15s; }
@@ -488,3 +489,22 @@ td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numer
 }
 .ho-emphasis-field label { font-weight: 700; color: var(--accent); }
 .ho-emphasis-field input, .ho-emphasis-field select { font-weight: 700; font-size: 15px; }
+
+.ho-emphasis-field-grey {
+  background: #f0f0ee;
+  border: 1.5px solid #8a8a86;
+  border-radius: 10px;
+  padding: 8px 10px 10px;
+}
+.ho-emphasis-field-grey label { font-weight: 700; color: #5c5c58; }
+.ho-emphasis-field-grey input, .ho-emphasis-field-grey select { font-weight: 700; font-size: 15px; }
+
+/* ---------- Kártörténet "Képek" — fixed 2x2 photo slots ---------- */
+.ho-kep-grid-2x2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ho-kep-tovabbi-title { font-size: 15px; font-weight: 700; color: #5c5c58; }
+.ho-kep-slot-title { font-weight: 700; margin-bottom: 8px; display: block; }
+.ho-kep-slot .ho-photo-add-row { margin-bottom: 8px; }
+.ho-kep-slot .ho-photo-preview img { max-width: 100%; border-radius: 8px; }
+@media (max-width: 640px) { .ho-kep-grid-2x2 { grid-template-columns: 1fr; } }
+.ho-kep-comment { margin-top: 8px; }
+.ho-kep-comment:disabled { background: #f2f2f0; cursor: not-allowed; color: var(--steel); }

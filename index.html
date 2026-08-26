@@ -283,7 +283,7 @@
         </div>
 
         <div>
-          <div class="grid-cols-2">
+          <div class="grid-cols-2" id="hoPartyGrid">
             <div class="ho-party-block" data-ho-modes="atadas kombinalt kartortenet">
               <div class="ho-party-title">Átadó</div>
               <div class="form-row"><div><label>Jogi személy neve</label><input type="text" id="hoAtadoNev" placeholder="pl. XY Kft. / Rent a Car"></div></div>
@@ -309,17 +309,14 @@
           </div>
         </div>
 
-        <div data-ho-modes="allapotfelmeres kombinalt kartortenet">
+        <div id="hoInspektorAnchor"></div>
+        <div data-ho-modes="allapotfelmeres kombinalt kartortenet" id="hoInspektorBlockWrap">
           <div class="ho-party-block">
             <div class="ho-party-title">Inspekciót végző</div>
-            <div class="form-row">
-              <div><label>Neve</label><input type="text" id="hoInspektorNev"></div>
-              <div><label>Képviselt szervezet neve</label><input type="text" id="hoInspektorSzervezet"></div>
-            </div>
-            <div class="form-row">
-              <div><label>Email címe</label><input type="email" id="hoInspektorEmail"></div>
-              <div><label>Telefonszáma</label><input type="text" id="hoInspektorTelefon"></div>
-            </div>
+            <div class="form-row"><div><label>Neve</label><input type="text" id="hoInspektorNev"></div></div>
+            <div class="form-row"><div><label>Képviselt szervezet neve</label><input type="text" id="hoInspektorSzervezet"></div></div>
+            <div class="form-row"><div><label>Email címe</label><input type="email" id="hoInspektorEmail"></div></div>
+            <div class="form-row"><div><label>Telefonszáma</label><input type="text" id="hoInspektorTelefon"></div></div>
           </div>
         </div>
 
@@ -384,7 +381,7 @@
         </div>
         <div class="form-row">
           <div class="ho-emphasis-field"><label>Km-óra állása</label><input type="number" id="hoKmOra" min="0"></div>
-          <div class="ho-emphasis-field">
+          <div class="ho-emphasis-field-grey">
             <label>Üzemanyagszint</label>
             <select id="hoUzemanyag">
               <option value="" selected>— üres —</option>
@@ -414,6 +411,19 @@
         </div>
 
         
+</div>
+
+<div class="ho-card" data-ho-modes="kartortenet">
+<div class="ho-section-title">Képek</div>
+        <div class="ho-kep-grid-2x2" id="hoKepGridFo"></div>
+
+        <div class="ho-section-title-row" style="margin-top:18px;">
+          <div class="ho-kep-tovabbi-title">További képek</div>
+          <label class="ho-ios-toggle" title="További képek"><input type="checkbox" data-role="hoBlockToggle" data-block="tovabbikepek" checked><span class="ho-ios-toggle-track"><span class="ho-ios-toggle-thumb"></span></span></label>
+        </div>
+        <div data-block-body="tovabbikepek">
+          <div class="ho-kep-grid-2x2" id="hoKepGridTovabbi"></div>
+        </div>
 </div>
 
 <div class="ho-card" data-ho-modes="kartortenet">

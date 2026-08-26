@@ -50,6 +50,18 @@ let hoCarMarks = [];    // [{x, y}] click positions on the car diagram
 let hoDamageRows = [];
 // hoKartortenetRows: [{id, hely, tipus, megjegyzes, javitva, photos: [{dataUrl, caption}]}]
 let hoKartortenetRows = [];
+// hoKepekData: each key holds either null or { dataUrl, aspect, caption }
+let hoKepekData = { balElso: null, jobbElso: null, balHatso: null, jobbHatso: null, dashboard: null, csomagter: null };
+const HO_KEP_SLOTS_FO = [
+  { key: 'balElso', label: 'Bal első' },
+  { key: 'jobbElso', label: 'Jobb első' },
+  { key: 'balHatso', label: 'Bal hátsó' },
+  { key: 'jobbHatso', label: 'Jobb hátsó' },
+];
+const HO_KEP_SLOTS_TOVABBI = [
+  { key: 'dashboard', label: 'Dashboard' },
+  { key: 'csomagter', label: 'Csomagtér' },
+];
 const HO_TIRE_POSITIONS = [
   { kod: 'BE', nev: 'Bal eleje' },
   { kod: 'JE', nev: 'Jobb eleje' },
@@ -118,6 +130,7 @@ function initHandoverFormOnce() {
   renderTireTable();
   renderDamageCards();
   renderKartortenetCards();
+  renderKepekSlots();
   renderMarkerPalette();
   drawCarDiagram();
   renderMarksList();
@@ -297,6 +310,23 @@ function applyModeVisibility() {
     const input = label.querySelector('input');
     label.classList.toggle('active', input.checked);
   });
+  hoRepositionInspektorBlock(mode);
+}
+
+// In Kártörténet mode, the Inspektor block moves INTO the Átadó/Átvevő grid
+// (as Átvevő is hidden there, this naturally becomes a two-column "Átadó |
+// Inspektor" layout) — in every other mode it moves back to its normal,
+// full-width standalone position, right after the anchor marker.
+function hoRepositionInspektorBlock(mode) {
+  const wrap = document.getElementById('hoInspektorBlockWrap');
+  const grid = document.getElementById('hoPartyGrid');
+  const anchor = document.getElementById('hoInspektorAnchor');
+  if (!wrap || !grid || !anchor) return;
+  if (mode === 'kartortenet') {
+    if (wrap.parentElement !== grid) grid.appendChild(wrap);
+  } else if (wrap.parentElement !== anchor.parentElement || wrap.previousElementSibling !== anchor) {
+    anchor.insertAdjacentElement('afterend', wrap);
+  }
 }
 
 // ---------------- Per-block "Releváns" toggles (sections 3-8) ----------------
@@ -833,6 +863,75 @@ document.getElementById('hoAddDamageRowBtn').addEventListener('click', () => {
 // instead of a "javítás szükséges?" question, this has a free-text comment
 // field and a settable "javítva van-e" (already repaired) toggle.
 
+// ---------------- Kártörténet — "Képek" (fixed single-photo slots) ----------------
+//
+// Unlike the damage cards (which can have any number of photos per row),
+// each of these slots holds exactly one photo — re-uploading replaces it.
+
+function renderKepekSlot(slot) {
+  const data = hoKepekData[slot.key];
+  return `
+    <div class="ho-kep-slot" data-slot="${slot.key}">
+      <span class="ho-kep-slot-title">${escapeHtml(slot.label)}</span>
+      <div class="ho-photo-add-row">
+        <label class="file-input-label">
+          📷 Fotó készítése
+          <input type="file" accept="image/*" capture="environment" data-role="hoKepSlotInput" data-slot="${slot.key}">
+        </label>
+        <label class="file-input-label">
+          + Kép feltöltése
+          <input type="file" accept="image/jpeg,image/png" data-role="hoKepSlotInput" data-slot="${slot.key}">
+        </label>
+      </div>
+      <div class="ho-photo-preview">
+        ${data ? `
+          <div>
+            <img src="${data.dataUrl}" class="ho-photo-thumb" alt="${escapeHtml(slot.label)}">
+            <button class="rm-btn" data-role="hoKepSlotRemove" data-slot="${slot.key}">✕ kép törlése</button>
+          </div>
+        ` : '<span class="ho-mark-empty">Még nincs kép feltöltve.</span>'}
+      </div>
+      <textarea class="ho-kep-comment" rows="2" data-role="hoKepSlotComment" data-slot="${slot.key}"
+        placeholder="Megjegyzés (opcionális)" ${data ? '' : 'disabled'}>${escapeHtml((data && data.caption) || '')}</textarea>
+    </div>
+  `;
+}
+
+function renderKepekSlots() {
+  const foEl = document.getElementById('hoKepGridFo');
+  const tovabbiEl = document.getElementById('hoKepGridTovabbi');
+  if (foEl) foEl.innerHTML = HO_KEP_SLOTS_FO.map(s => `<div class="ho-emphasis-field">${renderKepekSlot(s)}</div>`).join('');
+  if (tovabbiEl) tovabbiEl.innerHTML = HO_KEP_SLOTS_TOVABBI.map(s => `<div class="ho-emphasis-field-grey">${renderKepekSlot(s)}</div>`).join('');
+
+  document.querySelectorAll('[data-role="hoKepSlotInput"]').forEach(input => {
+    input.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const rawDataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const { dataUrl, aspect } = await compressImageDataUrl(rawDataUrl, 1200, 0.75);
+      hoKepekData[input.dataset.slot] = { dataUrl, aspect };
+      renderKepekSlots();
+    });
+  });
+  document.querySelectorAll('[data-role="hoKepSlotRemove"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      hoKepekData[btn.dataset.slot] = null;
+      renderKepekSlots();
+    });
+  });
+  document.querySelectorAll('[data-role="hoKepSlotComment"]').forEach(input => {
+    input.addEventListener('input', () => {
+      const slotData = hoKepekData[input.dataset.slot];
+      if (slotData) slotData.caption = input.value;
+    });
+  });
+}
+
 function renderKartortenetCards() {
   const container = document.getElementById('hoKartortenetCards');
   if (!container) return;
@@ -1029,7 +1128,7 @@ function hoPreloadVehicleImages(vehicleType) {
 // full handover document — nothing entered so far gets lost.
 
 function hoExportStateData() {
-  const state = { fields: {}, mode: null, blockToggles: {}, tires: getTireData(), marks: hoCarMarks, damageRows: hoDamageRows, kartortenetRows: hoKartortenetRows, checklist: {}, signatures: {} };
+  const state = { fields: {}, mode: null, blockToggles: {}, tires: getTireData(), marks: hoCarMarks, damageRows: hoDamageRows, kartortenetRows: hoKartortenetRows, kepekData: hoKepekData, checklist: {}, signatures: {} };
 
   document.querySelectorAll('#handoverScreen input[id^="ho"], #handoverScreen select[id^="ho"], #handoverScreen textarea[id^="ho"]').forEach(el => {
     if (el.type === 'checkbox') state.fields[el.id] = el.checked;
@@ -1111,7 +1210,11 @@ function hoImportStateData(state) {
   renderKartortenetCards();
 
   hoKartortenetRows = Array.isArray(state.kartortenetRows) ? state.kartortenetRows : [];
+  hoKepekData = state.kepekData && typeof state.kepekData === 'object'
+    ? Object.assign({ balElso: null, jobbElso: null, balHatso: null, jobbHatso: null, dashboard: null, csomagter: null }, state.kepekData)
+    : { balElso: null, jobbElso: null, balHatso: null, jobbHatso: null, dashboard: null, csomagter: null };
   renderKartortenetCards();
+  renderKepekSlots();
 
   Object.keys(state.signatures || {}).forEach((id) => {
     const canvas = document.getElementById(id);
@@ -1127,20 +1230,27 @@ function hoImportStateData(state) {
   });
 }
 
+function hoDownloadStateAsFile(filename, asJs) {
+  const state = hoExportStateData();
+  const content = asJs
+    ? '// Automatikusan generált mentés-fájl a PDF létrehozásakor — a "Betöltés"\n// gombbal (vagy a fájl-választóval) tölthető be, és onnan folytatható.\nwindow.HO_SAVED_STATE = ' + JSON.stringify(state, null, 2) + ';\n'
+    : JSON.stringify(state, null, 2);
+  const blob = new Blob([content], { type: asJs ? 'application/javascript' : 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 const hoSaveStateBtnEl = document.getElementById('hoSaveStateBtn');
 if (hoSaveStateBtnEl) {
   hoSaveStateBtnEl.addEventListener('click', () => {
-    const state = hoExportStateData();
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
     const rendszamPart = (document.getElementById('hoRendszam').value || 'jarmu').replace(/[^a-zA-Z0-9-]/g, '');
-    a.href = url;
-    a.download = 'allapotfelmeres_' + rendszamPart + '_' + new Date().toISOString().slice(0, 10) + '.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    hoDownloadStateAsFile('allapotfelmeres_' + rendszamPart + '_' + new Date().toISOString().slice(0, 10) + '.json', false);
     showToast('Mentve — a fájl később betölthető és folytatható/bővíthető.');
   });
 }
@@ -1152,7 +1262,15 @@ if (hoLoadStateInputEl) {
     if (!file) return;
     try {
       const text = await file.text();
-      const state = JSON.parse(text);
+      const trimmed = text.trim();
+      let state;
+      if (trimmed.startsWith('{')) {
+        state = JSON.parse(trimmed);
+      } else {
+        const match = text.match(/window\.HO_SAVED_STATE\s*=\s*(\{[\s\S]*\});?\s*$/);
+        if (!match) throw new Error('Ismeretlen fájlformátum — sem .json, sem a megszokott .js mentés-fájl nem illik rá.');
+        state = JSON.parse(match[1]);
+      }
       hoImportStateData(state);
       showToast('Betöltve — a mód váltásával (pl. Kombinált) bővítheted átadás-átvételi jegyzőkönyvvé.');
     } catch (err) {
@@ -1176,6 +1294,10 @@ document.getElementById('hoGenerateReportBtn').addEventListener('click', async (
     await hoPreloadVehicleImages(document.getElementById('hoVehicleType').value);
     buildHandoverPdf();
     showToast('PDF létrehozva.');
+    const mode = hoGetMode();
+    const modeFileSlugForSave = { atadas: 'atadas_atveteli_jegyzokonyv', allapotfelmeres: 'allapotfelmeres', kombinalt: 'allapotfelmeres_es_atadas_atveteli_jegyzokonyv', kartortenet: 'kartortenet' };
+    const rendszamPartForSave = (document.getElementById('hoRendszam').value || 'jarmu').replace(/[^a-zA-Z0-9-]/g, '');
+    hoDownloadStateAsFile((modeFileSlugForSave[mode] || modeFileSlugForSave.atadas) + '_mentes_' + rendszamPartForSave + '_' + new Date().toISOString().slice(0, 10) + '.js', true);
     const restartBtn = document.getElementById('hoStartNewCarBtn');
     if (restartBtn) restartBtn.disabled = false;
   } catch (err) {
@@ -1200,6 +1322,7 @@ function hoResetFormForNewCar() {
   hoCarMarks = [];
   hoDamageRows = [];
   hoKartortenetRows = [];
+  hoKepekData = { balElso: null, jobbElso: null, balHatso: null, jobbHatso: null, dashboard: null, csomagter: null };
   document.getElementById('hoJegkarMerteke').style.display = 'none';
 
   ['hoSigAtado', 'hoSigAtvevo', 'hoSigInspektor'].forEach((id) => {
@@ -1217,6 +1340,7 @@ function hoResetFormForNewCar() {
   renderTireTable();
   renderDamageCards();
   renderKartortenetCards();
+  renderKepekSlots();
   renderMarkerPalette();
   drawCarDiagram();
   renderMarksList();
@@ -1643,6 +1767,49 @@ function buildHandoverPdf() {
       { label: 'Szállítmányozó neve', value: val('hoSzallitmanyozoNeve') },
       { label: 'Fuvarlevél száma', value: val('hoFuvarlevelSzam') },
     ]);
+  }
+
+  if (showKartortenetFields) {
+    sectionTitle('Képek');
+    const tovabbiToggleEl = document.querySelector('[data-role="hoBlockToggle"][data-block="tovabbikepek"]');
+    const includeTovabbi = !tovabbiToggleEl || tovabbiToggleEl.checked;
+    const kepekSlotsToShow = HO_KEP_SLOTS_FO.concat(includeTovabbi ? HO_KEP_SLOTS_TOVABBI : []);
+    const kepGap = 14;
+    const kepColW = (contentW - kepGap) / 2;
+    const kepImgH = kepColW * 0.62;
+    for (let i = 0; i < kepekSlotsToShow.length; i += 2) {
+      const rowSlots = kepekSlotsToShow.slice(i, i + 2);
+      const captionLinesPerSlot = rowSlots.map(slot => {
+        const data = hoKepekData[slot.key];
+        return (data && data.caption) ? doc.splitTextToSize(data.caption, kepColW) : [];
+      });
+      const maxCaptionLines = Math.max(0, ...captionLinesPerSlot.map(l => l.length));
+      const captionBlockH = maxCaptionLines > 0 ? maxCaptionLines * 11 + 6 : 0;
+      ensureSpace(kepImgH + 26 + captionBlockH);
+      rowSlots.forEach((slot, colIdx) => {
+        const cx = marginX + colIdx * (kepColW + kepGap);
+        doc.setFontSize(9.5);
+        doc.setTextColor(...TEXT_DARK);
+        doc.text(slot.label, cx, y);
+        const data = hoKepekData[slot.key];
+        doc.setDrawColor(...RULE);
+        doc.setLineWidth(0.6);
+        doc.rect(cx, y + 6, kepColW, kepImgH, 'S');
+        if (data && data.dataUrl) {
+          try { doc.addImage(data.dataUrl, cx, y + 6, kepColW, kepImgH); } catch (err) { /* unsupported format — skip */ }
+          if (captionLinesPerSlot[colIdx].length) {
+            doc.setFontSize(9);
+            doc.setTextColor(...TEXT_MUTED);
+            doc.text(captionLinesPerSlot[colIdx], cx, y + 6 + kepImgH + 12);
+          }
+        } else {
+          doc.setFontSize(9);
+          doc.setTextColor(...TEXT_MUTED);
+          doc.text('Nincs kép feltöltve.', cx + 8, y + 6 + kepImgH / 2);
+        }
+      });
+      y += kepImgH + 26 + captionBlockH;
+    }
   }
 
   if (showKartortenetFields) {
