@@ -143,6 +143,9 @@ function initHandoverFormOnce() {
   // selected one) — by the time the user picks a type and clicks "Riport
   // generálása", they're already loaded (or well on their way).
   Object.keys(HO_VEHICLE_IMAGE_ASSETS).forEach(vt => hoPreloadVehicleImages(vt));
+
+  hoCheckForAutosaveOnLoad();
+  hoStartAutosave();
 }
 
 // ---------------- Rendszám autocomplete (Excel-driven vehicle lookup) ----------------
@@ -1230,6 +1233,106 @@ function hoImportStateData(state) {
   });
 }
 
+// ---------------- Automatikus, háttérben futó helyi mentés/visszaállítás ----------------
+//
+// Ha a felhasználó ablakot/appot vált, a böngésző/OS a háttérben lévő lapot
+// memória-felszabadítás céljából "kirakhatja" — visszatéréskor a lap újra
+// betöltődik, és minden csak-memóriában élő adat elveszne. Ez a mechanizmus
+// néhány másodpercenként elmenti a teljes űrlap-állapotot a böngésző saját,
+// lapon-túli tárolójába (localStorage), és a következő megnyitáskor
+// felajánlja a visszaállítást — ez FÜGGETLEN attól, hogy böngészőben vagy
+// telepített PWA-ként fut az app, mindkét esetben segít.
+const HO_AUTOSAVE_KEY = 'ho_autosave_state_v1';
+const HO_AUTOSAVE_INTERVAL_MS = 15000;
+let hoAutosaveIntervalId = null;
+let hoAutosaveWarned = false;
+
+function hoAutosaveTick() {
+  try {
+    const state = hoExportStateData();
+    localStorage.setItem(HO_AUTOSAVE_KEY, JSON.stringify({ savedAt: new Date().toISOString(), state }));
+  } catch (err) {
+    // Most likely a localStorage quota error (sok/nagy fotó) — ne szakítsa
+    // meg a munkát, csak egyszer jelezzük, hogy manuális mentés ajánlott.
+    if (!hoAutosaveWarned) {
+      hoAutosaveWarned = true;
+      showToast('Az automatikus mentés nem fér el a böngésző tárhelyén (sok/nagy fotó) — használd időnként a "Mentés" gombot.', true);
+    }
+  }
+}
+
+function hoStartAutosave() {
+  if (hoAutosaveIntervalId) return;
+  hoAutosaveIntervalId = setInterval(hoAutosaveTick, HO_AUTOSAVE_INTERVAL_MS);
+}
+
+function hoClearAutosave() {
+  try { localStorage.removeItem(HO_AUTOSAVE_KEY); } catch (err) { /* ignore */ }
+}
+
+function hoCheckForAutosaveOnLoad() {
+  let raw;
+  try { raw = localStorage.getItem(HO_AUTOSAVE_KEY); } catch (err) { return; }
+  if (!raw) return;
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (err) { hoClearAutosave(); return; }
+  if (!parsed || !parsed.state || !parsed.savedAt) { hoClearAutosave(); return; }
+
+  const savedAt = new Date(parsed.savedAt);
+  const label = isNaN(savedAt.getTime()) ? 'ismeretlen időpontban' : savedAt.toLocaleString('hu-HU');
+  const wantsRestore = confirm(
+    'Egy automatikusan mentett, korábban félbehagyott munkamenetet találtam (' + label + ').\n\n' +
+    'Ez akkor jöhetett létre, ha az oldal váratlanul újratöltődött (pl. ablak-/app-váltás miatt).\n\n' +
+    'Szeretnéd visszaállítani, és onnan folytatni?'
+  );
+  if (wantsRestore) {
+    try {
+      hoImportStateData(parsed.state);
+      showToast('Korábbi munkamenet visszaállítva.');
+    } catch (err) {
+      showToast('Hiba a korábbi munkamenet visszaállítása közben: ' + err.message, true);
+    }
+  } else {
+    hoClearAutosave();
+  }
+}
+
+// ---------------- Automatikus feltöltés egy közös Google Drive mappába ----------------
+//
+// Ha a drive-upload-config.js-ben be van állítva a Web App URL + titkos kód,
+// minden PDF-generálás és mentés (kézi "Mentés" gomb, automatikus .js mentés
+// PDF után) megpróbálja feltölteni ugyanazt a fájlt egy közös, megosztott
+// Google Drive mappába is. Ez a helyi letöltés MELLETT történik, nem
+// helyette — ha nincs internet, vagy a feltöltés bármi miatt sikertelen, a
+// helyi fájl akkor is létrejön, csak egy halk figyelmeztetés jelenik meg.
+
+function hoUtf8ToBase64(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+async function hoUploadToSharedDrive(fileName, base64Content, mimeType) {
+  const cfg = window.HO_DRIVE_UPLOAD_CONFIG;
+  if (!cfg || !cfg.WEB_APP_URL || !cfg.SECRET_KEY) return; // nincs beállítva — csendben kimarad
+
+  try {
+    const res = await fetch(cfg.WEB_APP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // elkerüli a CORS-preflight-ot
+      body: JSON.stringify({
+        secret: cfg.SECRET_KEY,
+        fileName,
+        fileContentBase64: base64Content,
+        mimeType,
+      }),
+    });
+    const result = await res.json();
+    if (!result.success) throw new Error(result.error || 'Ismeretlen hiba a szkript oldalán.');
+    showToast('☁️ Feltöltve a közös Drive-mappába: ' + fileName);
+  } catch (err) {
+    showToast('⚠️ Nem sikerült feltölteni a Drive-ra (' + fileName + '): ' + err.message, true);
+  }
+}
+
 function hoDownloadStateAsFile(filename, asJs) {
   const state = hoExportStateData();
   const content = asJs
@@ -1244,6 +1347,8 @@ function hoDownloadStateAsFile(filename, asJs) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+  hoUploadToSharedDrive(filename, hoUtf8ToBase64(content), asJs ? 'application/javascript' : 'application/json');
 }
 
 const hoSaveStateBtnEl = document.getElementById('hoSaveStateBtn');
@@ -1309,6 +1414,7 @@ document.getElementById('hoGenerateReportBtn').addEventListener('click', async (
 // vehicle, without leaving any stale data from the previous handover behind.
 function hoResetFormForNewCar() {
   if (!confirm('Biztosan új autóval kezded? Minden jelenlegi adat (kitöltött mezők, jelölések, fotók) elvész, ha nem mentetted el.')) return;
+  hoClearAutosave();
 
   document.querySelectorAll('#handoverScreen input[id^="ho"], #handoverScreen select[id^="ho"], #handoverScreen textarea[id^="ho"]').forEach((el) => {
     if (el.type === 'checkbox') el.checked = false;
@@ -2071,5 +2177,12 @@ function buildHandoverPdf() {
   if (sizeBytes > MAX_PDF_BYTES) {
     showToast('Figyelem: a generált PDF ' + (sizeBytes / (1024 * 1024)).toFixed(1) + ' MB, meghaladja az 5 MB célt — érdemes kevesebb vagy kisebb fotót csatolni.', true);
   }
-  doc.save((modeFileSlug[mode] || modeFileSlug.atadas) + '_' + rendszamPart + '_' + new Date().toISOString().slice(0, 10) + '.pdf');
+  const pdfFilename = (modeFileSlug[mode] || modeFileSlug.atadas) + '_' + rendszamPart + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
+  doc.save(pdfFilename);
+
+  try {
+    const dataUri = doc.output('datauristring');
+    const base64Part = dataUri.slice(dataUri.indexOf(',') + 1);
+    hoUploadToSharedDrive(pdfFilename, base64Part, 'application/pdf');
+  } catch (err) { /* feltöltés best-effort — a helyi PDF-mentés ettől függetlenül megtörtént */ }
 }
