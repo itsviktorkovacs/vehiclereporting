@@ -17,12 +17,12 @@
 //    having the absolute latest UI code this exact second.
 //
 // Bump this on any meaningful asset change so old caches get cleaned up.
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const SHELL_CACHE = 'sixt-fleet-shell-' + CACHE_VERSION;
 const DATA_CACHE = 'sixt-fleet-data-' + CACHE_VERSION;
 
 // Data files that must always try the network first.
-const DATA_FILE_PATTERN = /\/assets\/data\/(encrypted-data|vehicle-lookup|zone-config|handover-config|drive-upload-config)\.js(\?.*)?$/;
+const DATA_FILE_PATTERN = /\/assets\/data\/(encrypted-data|vehicle-lookup|zone-config|handover-config|drive-upload-config|app-version)\.js(\?.*)?$/;
 
 const SHELL_FILES = [
   './',

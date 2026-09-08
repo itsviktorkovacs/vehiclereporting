@@ -44,6 +44,10 @@ function showAppScreen(name) {
 
 // ---------------- Handover form state ----------------
 
+// FONTOS: ezt a verzió-jelölőt minden érdemi módosításnál bumpelni kell —
+// erre épül a "🔄 Verzió ellenőrzése" gomb (lásd assets/data/app-version.js).
+const HO_APP_VERSION = '2026-09-08.1';
+
 let hoInitialized = false;
 let hoCarMarks = [];    // [{x, y}] click positions on the car diagram
 // hoDamageRows: [{id, hely, tipus, javitasModja, rogzitve, javitasSzukseges, photos: [{dataUrl, caption}]}]
@@ -774,7 +778,7 @@ function renderDamageCards() {
           </select>
         </div>
       </div>
-      <div class="ho-photo-add-row">
+      <div class="ho-photo-add-row" ${row.photos.length >= 6 ? 'style="display:none;"' : ''}>
         <label class="file-input-label">
           📷 Fotó készítése
           <input type="file" accept="image/*" capture="environment" data-role="hoDamagePhotoInput" data-row="${row.id}">
@@ -784,7 +788,8 @@ function renderDamageCards() {
           <input type="file" accept="image/jpeg,image/png" data-role="hoDamagePhotoInput" data-row="${row.id}">
         </label>
       </div>
-      <div class="ho-photo-preview">
+      ${row.photos.length >= 6 ? '<div class="ho-photo-limit-note">Elérted a maximális 6 fotót ehhez a sérüléshez.</div>' : ''}
+      <div class="ho-photo-preview ho-photo-grid-2col">
         ${row.photos.map((p, i) => `
           <div>
             <img src="${p.dataUrl}" class="ho-photo-thumb" alt="sérülés fotó">
@@ -816,6 +821,10 @@ function renderDamageCards() {
       if (!file) return;
       const row = hoDamageRows.find(r => String(r.id) === input.dataset.row);
       if (!row) return;
+      if (row.photos.length >= 6) {
+        showToast('Ehhez a sérüléshez már 6 fotó tartozik — előbb törölj egyet, ha másikat szeretnél feltölteni.', true);
+        return;
+      }
       const rawDataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
@@ -971,7 +980,7 @@ function renderKartortenetCards() {
           <textarea data-role="hoKartortenetRowField" data-row="${row.id}" data-field="megjegyzes" rows="2" style="width:100%;" placeholder="Szabad szöveges megjegyzés a sérülésről...">${escapeHtml(row.megjegyzes)}</textarea>
         </div>
       </div>
-      <div class="ho-photo-add-row">
+      <div class="ho-photo-add-row" ${row.photos.length >= 6 ? 'style="display:none;"' : ''}>
         <label class="file-input-label">
           📷 Fotó készítése
           <input type="file" accept="image/*" capture="environment" data-role="hoKartortenetPhotoInput" data-row="${row.id}">
@@ -981,7 +990,8 @@ function renderKartortenetCards() {
           <input type="file" accept="image/jpeg,image/png" data-role="hoKartortenetPhotoInput" data-row="${row.id}">
         </label>
       </div>
-      <div class="ho-photo-preview">
+      ${row.photos.length >= 6 ? '<div class="ho-photo-limit-note">Elérted a maximális 6 fotót ehhez a sérüléshez.</div>' : ''}
+      <div class="ho-photo-preview ho-photo-grid-2col">
         ${row.photos.map((p, i) => `
           <div>
             <img src="${p.dataUrl}" class="ho-photo-thumb" alt="sérülés fotó">
@@ -1012,6 +1022,10 @@ function renderKartortenetCards() {
       if (!file) return;
       const row = hoKartortenetRows.find(r => String(r.id) === input.dataset.row);
       if (!row) return;
+      if (row.photos.length >= 6) {
+        showToast('Ehhez a sérüléshez már 6 fotó tartozik — előbb törölj egyet, ha másikat szeretnél feltölteni.', true);
+        return;
+      }
       const rawDataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
@@ -1315,9 +1329,16 @@ async function hoUploadToSharedDrive(fileName, base64Content, mimeType) {
   if (!cfg || !cfg.WEB_APP_URL || !cfg.SECRET_KEY) return; // nincs beállítva — csendben kimarad
 
   try {
-    const res = await fetch(cfg.WEB_APP_URL, {
+    // FONTOS: a Google Apps Script Web App válasza a gyakorlatban nem
+    // mindig tartalmaz megfelelő CORS fejlécet (a belső átirányítása
+    // miatt) — emiatt "no-cors" módot kell használni. Ennek ára, hogy a
+    // böngésző a választ "opaque"-ként (olvashatatlanként) kezeli: az
+    // app nem tudja innen leolvasni, hogy a szkript oldalán ténylegesen
+    // sikerült-e a mentés — csak azt, hogy a kérés kiment-e a hálózaton.
+    await fetch(cfg.WEB_APP_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // elkerüli a CORS-preflight-ot
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
         secret: cfg.SECRET_KEY,
         fileName,
@@ -1325,11 +1346,9 @@ async function hoUploadToSharedDrive(fileName, base64Content, mimeType) {
         mimeType,
       }),
     });
-    const result = await res.json();
-    if (!result.success) throw new Error(result.error || 'Ismeretlen hiba a szkript oldalán.');
-    showToast('☁️ Feltöltve a közös Drive-mappába: ' + fileName);
+    showToast('☁️ Elküldve a közös Drive-mappába: ' + fileName);
   } catch (err) {
-    showToast('⚠️ Nem sikerült feltölteni a Drive-ra (' + fileName + '): ' + err.message, true);
+    showToast('⚠️ Nem sikerült elküldeni a Drive-ra (' + fileName + '): ' + err.message, true);
   }
 }
 
@@ -1385,6 +1404,94 @@ if (hoLoadStateInputEl) {
   });
 }
 
+// ---------------- "🔌 Drive teszt" — kapcsolat-ellenőrzés visszajelzéssel ----------------
+//
+// FONTOS KORLÁT: a Google Apps Script Web App válasza a gyakorlatban nem
+// mindig ad megfelelő CORS fejlécet, ezért a tényleges feltöltéshez (és
+// ehhez a teszthez is) "no-cors" módot kell használni — ez azt jelenti,
+// hogy a böngésző NEM tudja automatikusan visszaigazolni, hogy a fájl
+// ténylegesen megérkezett-e a Drive-mappába. Emiatt ez a teszt egy
+// egyedi nevű, felismerhető fájlt küld, és a felhasználót kéri meg a
+// Drive-mappában történő manuális ellenőrzésre — ez a legőszintébb,
+// technikailag pontos megoldás e korlát mellett.
+const hoTestDriveBtnEl = document.getElementById('hoTestDriveBtn');
+if (hoTestDriveBtnEl) {
+  hoTestDriveBtnEl.addEventListener('click', async () => {
+    const cfg = window.HO_DRIVE_UPLOAD_CONFIG;
+    if (!cfg || !cfg.WEB_APP_URL || !cfg.SECRET_KEY) {
+      showToast('A Drive-feltöltés nincs beállítva (drive-upload-config.js üres) — nincs mit tesztelni.', true);
+      return;
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const testFileName = 'kapcsolat_teszt_' + stamp + '.txt';
+    const testContent = 'Ez egy automatikus kapcsolat-teszt fájl a SIXT Fleet Control appból.\nHa ezt látod a Drive-mappában, a feltöltés működik.\nIdőbélyeg: ' + new Date().toLocaleString('hu-HU');
+    hoTestDriveBtnEl.disabled = true;
+    try {
+      await fetch(cfg.WEB_APP_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          secret: cfg.SECRET_KEY,
+          fileName: testFileName,
+          fileContentBase64: hoUtf8ToBase64(testContent),
+          mimeType: 'text/plain',
+        }),
+      });
+      alert(
+        'Teszt-kérés elküldve: ' + testFileName + '\n\n' +
+        'A böngésző biztonsági korlátai miatt az app nem tudja automatikusan ' +
+        'visszaigazolni, hogy a Google Apps Script valóban elmentette-e a fájlt.\n\n' +
+        'Kérlek nézd meg pár másodperc múlva a közös Drive-mappában: ha ott van ez a ' +
+        'fájl, a kapcsolat működik. Ha nincs ott (kb. fél percen belül sem), ellenőrizd ' +
+        'a szkript üzembe helyezési beállításait (Hozzáférők: "Bárki").'
+      );
+    } catch (err) {
+      showToast('⚠️ A teszt-kérés elküldése sikertelen (hálózati hiba): ' + err.message, true);
+    } finally {
+      hoTestDriveBtnEl.disabled = false;
+    }
+  });
+}
+
+// ---------------- "🔄 Verzió ellenőrzése" ----------------
+//
+// Összeveti a jelenleg futó (esetleg gyorsítótárazott/elavult) kód saját
+// verzió-jelölőjét (HO_APP_VERSION, a handover.js tetején) a szerveren
+// ténylegesen elérhető legfrissebb verzióval (app-version.js, mindig
+// hálózatról, cache-kizárással lekérve) — ha eltér, jelzi, hogy frissítés
+// szükséges.
+const hoCheckVersionBtnEl = document.getElementById('hoCheckVersionBtn');
+if (hoCheckVersionBtnEl) {
+  hoCheckVersionBtnEl.addEventListener('click', async () => {
+    hoCheckVersionBtnEl.disabled = true;
+    try {
+      const res = await fetch('assets/data/app-version.js?_=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) throw new Error('A verzió-fájl nem érhető el (HTTP ' + res.status + ').');
+      const text = await res.text();
+      const match = text.match(/HO_APP_VERSION_LATEST\s*=\s*['"]([^'"]+)['"]/);
+      if (!match) throw new Error('A verzió-fájl formátuma nem felismerhető.');
+      const latestVersion = match[1];
+
+      if (latestVersion === HO_APP_VERSION) {
+        alert('✅ A legfrissebb verziót futtatod.\n\nJelenlegi verzió: ' + HO_APP_VERSION);
+      } else {
+        alert(
+          '⚠️ Nem a legfrissebb verziót futtatod!\n\n' +
+          'Jelenleg futó verzió: ' + HO_APP_VERSION + '\n' +
+          'Legfrissebb elérhető verzió: ' + latestVersion + '\n\n' +
+          'Kérlek frissítsd az oldalt (húzd le / töltsd újra teljesen — ha telepített ' +
+          'appként használod, zárd be és nyisd meg újra), hogy a legújabb javításokat ' +
+          'és funkciókat is megkapd.'
+        );
+      }
+    } catch (err) {
+      showToast('⚠️ Nem sikerült ellenőrizni a verziót: ' + err.message, true);
+    } finally {
+      hoCheckVersionBtnEl.disabled = false;
+    }
+  });
+}
 
 document.getElementById('hoGenerateReportBtn').addEventListener('click', async () => {
   if (!document.getElementById('hoRendszam').value.trim()) {
@@ -1659,18 +1766,25 @@ function buildHandoverPdf() {
   // One rounded card per recorded damage — header row + details + its own photos.
   function damageCard(row, index) {
     const padX = 16, padY = 13, headerH = 16, detailH = 14;
-    const photoGap = 16, rowGap = 14, maxPhotoH = 260;
-    const leftColW = (contentW - padX * 2 - photoGap) / 2;
-    const rightColW = leftColW;
+    const photoGap = 14, rowGap = 16, maxPhotoH = 130;
+    const photoColW = (contentW - padX * 2 - photoGap) / 2;
 
-    const photoLayout = row.photos.map(p => {
-      const aspect = p.aspect || 4 / 3;
-      const imgH = Math.min(maxPhotoH, leftColW / aspect);
-      const captionLines = p.caption ? doc.splitTextToSize(p.caption, rightColW) : [];
-      const captionH = captionLines.length * 11;
-      return { imgH, captionLines, rowH: Math.max(imgH, captionH) };
-    });
-    const photosH = photoLayout.reduce((sum, p) => sum + p.rowH + rowGap, 0);
+    // Precompute a 2-per-row grid layout for up to 6 photos, matching the
+    // on-screen 2x3 arrangement — each photo keeps its own aspect ratio
+    // (capped at maxPhotoH), and a pair's row height is set by the taller
+    // of the two so nothing overlaps.
+    const photoRows = [];
+    for (let i = 0; i < row.photos.length; i += 2) {
+      const pair = [row.photos[i], row.photos[i + 1]].filter(Boolean).map(p => {
+        const aspect = p.aspect || 4 / 3;
+        const imgH = Math.min(maxPhotoH, photoColW / aspect);
+        const captionLines = p.caption ? doc.splitTextToSize(p.caption, photoColW) : [];
+        return { photo: p, imgH, captionLines, captionH: captionLines.length * 10 };
+      });
+      const rowH = Math.max(...pair.map(p => p.imgH + (p.captionH ? p.captionH + 4 : 0)));
+      photoRows.push({ pair, rowH });
+    }
+    const photosH = photoRows.reduce((sum, r) => sum + r.rowH + rowGap, 0);
     const cardH = padY * 2 + headerH + detailH + (photosH > 0 ? photosH + 4 : 0);
     ensureSpace(cardH + 14);
     doc.setDrawColor(...RULE);
@@ -1688,17 +1802,17 @@ function buildHandoverPdf() {
     doc.text(details, marginX + padX, y + padY + 8 + headerH);
 
     let py = y + padY + headerH + detailH + 10;
-    row.photos.forEach((p, i) => {
-      const layout = photoLayout[i];
-      const imgX = marginX + padX;
-      const capX = marginX + padX + leftColW + photoGap;
-      try { doc.addImage(p.dataUrl, imgX, py, leftColW, layout.imgH); } catch (err) { /* unsupported format — skip */ }
-      if (layout.captionLines.length) {
-        doc.setFontSize(9);
-        doc.setTextColor(...TEXT_MUTED);
-        doc.text(layout.captionLines, capX, py + 11);
-      }
-      py += layout.rowH + rowGap;
+    photoRows.forEach((prow) => {
+      prow.pair.forEach((cell, colIdx) => {
+        const cx = marginX + padX + colIdx * (photoColW + photoGap);
+        try { doc.addImage(cell.photo.dataUrl, cx, py, photoColW, cell.imgH); } catch (err) { /* unsupported format — skip */ }
+        if (cell.captionLines.length) {
+          doc.setFontSize(8.5);
+          doc.setTextColor(...TEXT_MUTED);
+          doc.text(cell.captionLines, cx, py + cell.imgH + 10);
+        }
+      });
+      py += prow.rowH + rowGap;
     });
 
     y += cardH + 16;
@@ -1706,21 +1820,24 @@ function buildHandoverPdf() {
 
   function kartortenetDamageCard(row, index) {
     const padX = 16, padY = 13, headerH = 16;
-    const photoGap = 16, rowGap = 14, maxPhotoH = 260;
-    const leftColW = (contentW - padX * 2 - photoGap) / 2;
-    const rightColW = leftColW;
+    const photoGap = 14, rowGap = 16, maxPhotoH = 130;
+    const photoColW = (contentW - padX * 2 - photoGap) / 2;
 
     const megjegyzesLines = row.megjegyzes ? doc.splitTextToSize(row.megjegyzes, contentW - padX * 2) : ['na.'];
     const detailH = megjegyzesLines.length * 11 + 4;
 
-    const photoLayout = row.photos.map(p => {
-      const aspect = p.aspect || 4 / 3;
-      const imgH = Math.min(maxPhotoH, leftColW / aspect);
-      const captionLines = p.caption ? doc.splitTextToSize(p.caption, rightColW) : [];
-      const captionH = captionLines.length * 11;
-      return { imgH, captionLines, rowH: Math.max(imgH, captionH) };
-    });
-    const photosH = photoLayout.reduce((sum, p) => sum + p.rowH + rowGap, 0);
+    const photoRows = [];
+    for (let i = 0; i < row.photos.length; i += 2) {
+      const pair = [row.photos[i], row.photos[i + 1]].filter(Boolean).map(p => {
+        const aspect = p.aspect || 4 / 3;
+        const imgH = Math.min(maxPhotoH, photoColW / aspect);
+        const captionLines = p.caption ? doc.splitTextToSize(p.caption, photoColW) : [];
+        return { photo: p, imgH, captionLines, captionH: captionLines.length * 10 };
+      });
+      const rowH = Math.max(...pair.map(p => p.imgH + (p.captionH ? p.captionH + 4 : 0)));
+      photoRows.push({ pair, rowH });
+    }
+    const photosH = photoRows.reduce((sum, r) => sum + r.rowH + rowGap, 0);
     const cardH = padY * 2 + headerH + detailH + (photosH > 0 ? photosH + 4 : 0);
     ensureSpace(cardH + 14);
     doc.setDrawColor(...RULE);
@@ -1740,17 +1857,17 @@ function buildHandoverPdf() {
     doc.text(megjegyzesLines, marginX + padX, y + padY + 8 + headerH);
 
     let py = y + padY + headerH + detailH + 10;
-    row.photos.forEach((p, i) => {
-      const layout = photoLayout[i];
-      const imgX = marginX + padX;
-      const capX = marginX + padX + leftColW + photoGap;
-      try { doc.addImage(p.dataUrl, imgX, py, leftColW, layout.imgH); } catch (err) { /* unsupported format — skip */ }
-      if (layout.captionLines.length) {
-        doc.setFontSize(9);
-        doc.setTextColor(...TEXT_MUTED);
-        doc.text(layout.captionLines, capX, py + 11);
-      }
-      py += layout.rowH + rowGap;
+    photoRows.forEach((prow) => {
+      prow.pair.forEach((cell, colIdx) => {
+        const cx = marginX + padX + colIdx * (photoColW + photoGap);
+        try { doc.addImage(cell.photo.dataUrl, cx, py, photoColW, cell.imgH); } catch (err) { /* unsupported format — skip */ }
+        if (cell.captionLines.length) {
+          doc.setFontSize(8.5);
+          doc.setTextColor(...TEXT_MUTED);
+          doc.text(cell.captionLines, cx, py + cell.imgH + 10);
+        }
+      });
+      py += prow.rowH + rowGap;
     });
 
     y += cardH + 16;
